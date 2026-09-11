@@ -1,0 +1,1183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>AvianLife - State & National Life List</title>
+  
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js"></script>
+
+  <style>
+    #map { height: 100%; width: 100%; }
+    .leaflet-popup-content-wrapper { border-radius: 14px; padding: 2px; background: #1c1917; color: #f5f5f4; border: 1px solid #44403c; }
+    .leaflet-popup-tip { background: #1c1917; }
+    
+    .crop-viewport {
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      position: relative;
+      overflow: hidden;
+      border-radius: 12px;
+      touch-action: none;
+      user-select: none;
+      background: #0c0a09;
+      cursor: grab;
+    }
+    .crop-viewport:active { cursor: grabbing; }
+    .crop-grid {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      border: 1px solid rgba(255,255,255,0.25);
+      background-image: 
+        linear-gradient(to right, rgba(255,255,255,0.15) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255,255,255,0.15) 1px, transparent 1px);
+      background-size: 33.33% 33.33%;
+    }
+
+    .bird-chit-icon {
+      border: 2px solid #10b981;
+      border-radius: 50%;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+      background-color: #1c1917;
+      background-size: cover;
+      background-position: center;
+      transition: transform 0.15s ease;
+    }
+    .bird-chit-icon:hover {
+      transform: scale(1.15);
+      border-color: #34d399;
+      z-index: 1000 !important;
+    }
+
+    .map-center-dot {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      z-index: 500;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0.4;
+    }
+
+    .sparkline-bar {
+      display: inline-block;
+      width: 4px;
+      border-radius: 1px;
+      margin-right: 1.5px;
+      background-color: #44403c;
+    }
+    .sparkline-bar.active { background-color: #10b981; }
+    .sparkline-bar.current-month { border-bottom: 2px solid #38bdf8; }
+  </style>
+</head>
+<body class="bg-stone-950 text-stone-100 font-sans flex flex-col h-screen overflow-hidden">
+
+  <!-- Header -->
+  <header class="h-14 border-b border-stone-800 bg-stone-900 px-4 flex items-center justify-between shrink-0 z-10">
+    <div class="flex items-center gap-2">
+      <div class="w-7 h-7 rounded-lg bg-emerald-600 flex items-center justify-center text-sm shadow">🪶</div>
+      <div>
+        <div class="flex items-center gap-1.5">
+          <h1 class="font-bold text-base leading-none tracking-tight">AvianLife</h1>
+          <span id="data-status-badge" class="text-[9px] bg-emerald-950 text-emerald-400 border border-emerald-800 px-1 rounded font-mono">eBird Verified</span>
+        </div>
+        <span class="text-[10px] text-stone-400">State & National Records</span>
+      </div>
+    </div>
+    
+    <button onclick="openUploadModal()" class="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-3 py-1.5 rounded-lg font-semibold shadow transition active:scale-95">
+      <i data-lucide="plus-circle" class="w-4 h-4"></i> Log Sighting
+    </button>
+  </header>
+
+  <!-- Viewports -->
+  <main class="flex-1 relative overflow-hidden">
+    
+    <!-- 1. MAP VIEW -->
+    <section id="view-map" class="w-full h-full relative">
+      <div class="absolute top-3 left-3 right-3 z-[1000] flex flex-col gap-2 pointer-events-none">
+        <div class="flex justify-between items-center w-full gap-2">
+          <div class="flex bg-stone-900/90 backdrop-blur border border-stone-700/80 rounded-lg p-0.5 shadow-xl pointer-events-auto">
+            <button onclick="setTimeFilter('7d')" id="btn-time-7d" class="text-[10px] px-2 py-1 rounded font-semibold text-stone-400 hover:text-stone-100 transition">7D</button>
+            <button onclick="setTimeFilter('30d')" id="btn-time-30d" class="text-[10px] px-2 py-1 rounded font-semibold text-stone-400 hover:text-stone-100 transition">30D</button>
+            <button onclick="setTimeFilter('1y')" id="btn-time-1y" class="text-[10px] px-2 py-1 rounded font-semibold text-stone-400 hover:text-stone-100 transition">1Y</button>
+            <button onclick="setTimeFilter('all')" id="btn-time-all" class="text-[10px] px-2 py-1 rounded font-semibold bg-emerald-600 text-white transition">All</button>
+          </div>
+
+          <div class="pointer-events-auto">
+            <select id="map-species-filter" onchange="applyMapFilters()" class="bg-stone-900/90 backdrop-blur border border-stone-700/80 text-xs rounded-lg px-2.5 py-1.5 text-stone-200 shadow-xl focus:outline-none max-w-[140px] truncate">
+              <option value="all">All Species</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="map-center-dot">
+        <div class="w-4 h-4 border border-emerald-400/50 rounded-full flex items-center justify-center">
+          <div class="w-1 h-1 bg-emerald-400 rounded-full"></div>
+        </div>
+      </div>
+
+      <div id="map"></div>
+
+      <!-- Discovery Goal HUD -->
+      <div class="absolute bottom-3 left-3 right-3 z-[1000] bg-stone-900/95 backdrop-blur-md border border-stone-800 rounded-xl p-3 shadow-2xl">
+        <div class="flex items-center justify-between mb-2">
+          <div class="flex items-center gap-1.5">
+            <span class="text-[10px] font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1">
+              <i data-lucide="award" class="w-3.5 h-3.5"></i> Discovery Goal
+            </span>
+          </div>
+          
+          <div class="flex bg-stone-800 rounded p-0.5 border border-stone-700">
+            <button onclick="setRegionLevel('state')" id="btn-level-state" class="text-[9px] px-3 py-0.5 rounded font-bold uppercase bg-emerald-600 text-white">State</button>
+            <button onclick="setRegionLevel('country')" id="btn-level-country" class="text-[9px] px-3 py-0.5 rounded font-bold uppercase text-stone-400">Country</button>
+          </div>
+        </div>
+        
+        <div class="flex justify-between items-baseline mb-1.5 text-xs">
+          <button onclick="openRegionSpeciesModal()" class="group flex items-center gap-1.5 text-left font-bold text-stone-100 hover:text-emerald-400 transition truncate max-w-[70%]">
+            <span id="region-label" class="truncate underline decoration-dotted decoration-stone-500 group-hover:decoration-emerald-400">North Carolina</span>
+            <i data-lucide="database" class="w-3 h-3 text-stone-400 group-hover:text-emerald-400 shrink-0"></i>
+          </button>
+          <span id="region-stats" class="font-mono text-emerald-400 font-bold shrink-0 ml-2">0 / 0 (0.0%)</span>
+        </div>
+        
+        <div class="w-full h-1.5 bg-stone-800 rounded-full overflow-hidden border border-stone-700/60">
+          <div id="region-bar" class="h-full bg-emerald-500 rounded-full transition-all duration-300" style="width: 0%"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. LIFE LIST VIEW -->
+    <section id="view-lifelist" class="hidden w-full h-full overflow-y-auto p-3 pb-24">
+      <div class="flex items-center justify-between pb-3 border-b border-stone-800 gap-2">
+        <div>
+          <h2 class="text-base font-bold">Master Life List</h2>
+          <p class="text-[11px] text-stone-400" id="lifelist-subtitle">Tap any lifer for details</p>
+        </div>
+        <select id="lifelist-sort" onchange="renderLifeList()" class="bg-stone-900 border border-stone-700 text-xs rounded-md px-2.5 py-1.5 text-stone-300">
+          <option value="firstSeen">Lifer Date</option>
+          <option value="recent">Most Recent</option>
+          <option value="count">Most Logged</option>
+          <option value="alpha">Species (A-Z)</option>
+        </select>
+      </div>
+      <div id="lifelist-grid" class="grid grid-cols-2 gap-2.5 mt-3"></div>
+    </section>
+
+    <!-- 3. GALLERY VIEW -->
+    <section id="view-gallery" class="hidden w-full h-full overflow-y-auto p-3 pb-24">
+      <div class="flex items-center justify-between pb-3 border-b border-stone-800 gap-2">
+        <div>
+          <h2 class="text-base font-bold">Photo Gallery</h2>
+          <p class="text-[11px] text-stone-400" id="gallery-subtitle">Tap photo for detail view</p>
+        </div>
+        <select id="gallery-species-filter" onchange="renderGallery()" class="bg-stone-900 border border-stone-700 text-xs rounded-md px-2.5 py-1.5 text-stone-300 max-w-[140px] truncate">
+          <option value="all">All Species</option>
+        </select>
+      </div>
+      <div id="gallery-grid" class="grid grid-cols-2 gap-2.5 mt-3"></div>
+    </section>
+
+    <!-- 4. PHENOLOGY RADAR VIEW -->
+    <section id="view-radar" class="hidden w-full h-full overflow-y-auto p-4 pb-24">
+      <div class="mb-4">
+        <span class="text-[10px] font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1">
+          <i data-lucide="sparkles" class="w-3.5 h-3.5"></i> Phenology Occurrence Radar
+        </span>
+        <h2 class="text-base font-bold mt-0.5">High-Probability Targets</h2>
+        <p class="text-xs text-stone-400">Species historically reported in this region during the current month.</p>
+      </div>
+      <div id="radar-list" class="space-y-2.5"></div>
+    </section>
+  </main>
+
+  <!-- STATE CHECKLIST MODAL -->
+  <div id="region-species-modal" class="fixed inset-0 z-[2600] bg-black/90 backdrop-blur-md hidden flex items-center justify-center p-3 sm:p-5 overflow-y-auto">
+    <div class="bg-stone-900 border border-stone-700 rounded-2xl w-full max-w-lg max-h-[92vh] flex flex-col shadow-2xl overflow-hidden my-auto">
+      
+      <div class="p-4 border-b border-stone-800 flex items-center justify-between shrink-0">
+        <div>
+          <span class="text-[10px] font-bold text-emerald-400 uppercase tracking-wider block">Official eBird Checklist</span>
+          <h3 id="modal-region-title" class="font-bold text-base text-stone-100">North Carolina</h3>
+        </div>
+        <button onclick="closeRegionSpeciesModal()" class="text-stone-400 hover:text-white p-1 text-base">✕</button>
+      </div>
+
+      <div class="flex border-b border-stone-800 bg-stone-950/60 p-1">
+        <button onclick="switchRegionModalTab('discovered')" id="tab-btn-discovered" class="flex-1 py-2 rounded-lg text-xs font-semibold bg-emerald-600 text-white transition flex items-center justify-center gap-1.5">
+          <i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i> Discovered (<span id="modal-discovered-count">0</span>)
+        </button>
+        <button onclick="switchRegionModalTab('missing')" id="tab-btn-missing" class="flex-1 py-2 rounded-lg text-xs font-semibold text-stone-400 hover:text-stone-200 transition flex items-center justify-center gap-1.5">
+          <i data-lucide="circle-dashed" class="w-3.5 h-3.5"></i> Missing Targets (<span id="modal-missing-count">0</span>)
+        </button>
+      </div>
+
+      <div class="p-2 border-b border-stone-800/80 bg-stone-900">
+        <input type="text" id="checklist-search" oninput="renderChecklistViews()" placeholder="Search species, family, or status..." class="w-full bg-stone-950 border border-stone-700 rounded-lg px-3 py-1.5 text-xs text-stone-200 placeholder-stone-500 focus:outline-none focus:ring-1 focus:ring-emerald-500" />
+      </div>
+
+      <div class="p-4 overflow-y-auto flex-1 text-xs">
+        <div id="modal-discovered-view" class="space-y-2.5"></div>
+        <div id="modal-missing-view" class="hidden space-y-2.5"></div>
+      </div>
+
+      <div class="p-3 border-t border-stone-800 bg-stone-950/80 flex justify-between items-center shrink-0 text-xs">
+        <span id="modal-summary-pct" class="font-mono text-emerald-400 font-medium">0% Completed</span>
+        <button onclick="closeRegionSpeciesModal()" class="bg-stone-800 hover:bg-stone-700 text-stone-200 px-4 py-1.5 rounded-lg border border-stone-700 font-medium text-xs">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SIGHTING DETAIL DOSSIER -->
+  <div id="detail-modal" class="fixed inset-0 z-[2500] bg-black/90 backdrop-blur-md hidden flex items-center justify-center p-3 sm:p-5 overflow-y-auto">
+    <div class="bg-stone-900 border border-stone-700 rounded-2xl w-full max-w-lg max-h-[95vh] flex flex-col shadow-2xl overflow-hidden my-auto">
+      <div class="p-3 border-b border-stone-800 flex items-center justify-between shrink-0">
+        <div>
+          <h3 id="detail-common-name" class="font-bold text-sm text-stone-100">Species Name</h3>
+          <p id="detail-scientific-name" class="text-[10px] italic text-stone-400">Scientific Name</p>
+        </div>
+        <button onclick="closeDetailModal()" class="text-stone-400 hover:text-white p-1 text-base">✕</button>
+      </div>
+
+      <div class="p-4 overflow-y-auto space-y-4 text-xs">
+        <div class="w-full rounded-xl overflow-hidden bg-stone-950 border border-stone-800 max-h-80 flex items-center justify-center">
+          <img id="detail-img" src="" class="w-full h-full object-contain max-h-80" />
+        </div>
+
+        <div class="grid grid-cols-2 gap-2 bg-stone-950/60 p-3 rounded-xl border border-stone-800/80">
+          <div>
+            <span class="text-[10px] text-stone-500 uppercase font-semibold block">Date Seen</span>
+            <span id="detail-date" class="font-medium text-stone-200"></span>
+          </div>
+          <div>
+            <span class="text-[10px] text-stone-500 uppercase font-semibold block">Location</span>
+            <span id="detail-location" class="font-medium text-stone-200"></span>
+          </div>
+          <div>
+            <span class="text-[10px] text-stone-500 uppercase font-semibold block">State</span>
+            <span id="detail-state" class="font-medium text-stone-200"></span>
+          </div>
+          <div>
+            <span class="text-[10px] text-stone-500 uppercase font-semibold block">Coordinates</span>
+            <span id="detail-coords" class="font-mono text-emerald-400 text-[11px]"></span>
+          </div>
+        </div>
+
+        <div id="detail-notes-container" class="bg-stone-950/40 p-3 rounded-xl border border-stone-800/50">
+          <span class="text-[10px] text-stone-500 uppercase font-semibold block mb-1">Field Notes</span>
+          <p id="detail-notes" class="text-stone-300 italic text-[11px]"></p>
+        </div>
+
+        <div>
+          <span class="text-[10px] text-stone-400 uppercase font-bold tracking-wider block mb-2">
+            Sightings of this Species (<span id="detail-sibling-count">0</span>)
+          </span>
+          <div id="detail-siblings" class="flex gap-2 overflow-x-auto pb-2"></div>
+        </div>
+      </div>
+
+      <div class="p-3 border-t border-stone-800 bg-stone-900 flex justify-between items-center shrink-0">
+        <button id="btn-toggle-cover-detail" class="text-xs text-stone-300 bg-stone-800 hover:bg-stone-700 px-3 py-1.5 rounded-lg border border-stone-700 flex items-center gap-1.5">
+          <i data-lucide="star" class="w-3.5 h-3.5"></i> Set as Best Photo
+        </button>
+        <button onclick="closeDetailModal()" class="text-xs bg-emerald-600 text-white px-4 py-1.5 rounded-lg font-medium">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- LOGGING MODAL -->
+  <div id="upload-modal" class="fixed inset-0 z-[2000] bg-black/85 backdrop-blur-sm hidden flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+    <div class="bg-stone-900 border border-stone-700 rounded-2xl w-full max-w-md max-h-[92vh] flex flex-col shadow-2xl overflow-hidden my-auto">
+      <div class="p-4 border-b border-stone-800 flex items-center justify-between shrink-0">
+        <h3 class="font-bold text-sm text-stone-100 flex items-center gap-2">
+          <i data-lucide="feather" class="w-4 h-4 text-emerald-400"></i> Log Sighting
+        </h3>
+        <button onclick="closeUploadModal()" class="text-stone-400 hover:text-white p-1">✕</button>
+      </div>
+
+      <div class="p-4 overflow-y-auto space-y-4 text-xs">
+        <div>
+          <label class="font-bold text-stone-300 block mb-1 text-[11px] uppercase tracking-wider">Species</label>
+          <select id="form-species" required class="w-full bg-stone-800 border border-stone-700 rounded-lg p-2.5 text-stone-100 focus:ring-1 focus:ring-emerald-500"></select>
+        </div>
+
+        <div>
+          <label class="font-bold text-stone-300 block mb-1 text-[11px] uppercase tracking-wider">Bird Photo & Framing</label>
+          <input type="file" id="form-file" accept="image/*" onchange="handleImageSelection(event)" class="w-full text-xs text-stone-400 file:mr-2 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-stone-800 file:text-emerald-400 hover:file:bg-stone-700 mb-2" />
+
+          <div id="cropper-container" class="hidden space-y-2 border border-stone-800 p-2.5 rounded-xl bg-stone-950/60">
+            <div class="crop-viewport" id="crop-viewport">
+              <img id="crop-image" src="" alt="To Crop" style="position: absolute; transform-origin: center; will-change: transform;" />
+              <div class="crop-grid"></div>
+            </div>
+            
+            <div class="flex items-center gap-3 pt-1 px-1">
+              <i data-lucide="zoom-in" class="w-4 h-4 text-stone-400 shrink-0"></i>
+              <input type="range" id="crop-zoom" min="1" max="3.5" step="0.05" value="1" oninput="updateCropTransform()" class="w-full accent-emerald-500 h-1.5 bg-stone-800 rounded-lg cursor-pointer" />
+              <button type="button" onclick="resetCrop()" class="text-[10px] text-stone-400 hover:text-stone-200 font-mono shrink-0">Reset</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="space-y-2">
+          <label class="font-bold text-stone-300 block text-[11px] uppercase tracking-wider">Location & Coordinates</label>
+          <div class="grid grid-cols-2 gap-2">
+            <button type="button" onclick="fetchGPSLocation()" id="btn-gps" class="flex items-center justify-center gap-1.5 bg-stone-800 hover:bg-stone-700 border border-stone-700 text-stone-200 py-2 rounded-lg font-medium transition">
+              <i data-lucide="navigation" class="w-3.5 h-3.5 text-emerald-400"></i> Use My GPS
+            </button>
+            <button type="button" onclick="togglePickerMap()" id="btn-picker-map" class="flex items-center justify-center gap-1.5 bg-stone-800 hover:bg-stone-700 border border-stone-700 text-stone-200 py-2 rounded-lg font-medium transition">
+              <i data-lucide="map-pin" class="w-3.5 h-3.5 text-emerald-400"></i> Pick on Map
+            </button>
+          </div>
+
+          <div id="picker-map-drawer" class="hidden h-48 w-full rounded-xl overflow-hidden border border-stone-700 relative">
+            <div id="picker-map" style="height: 100%; width: 100%;"></div>
+            <span class="absolute bottom-1 left-2 z-[1000] text-[9px] bg-stone-900/80 px-2 py-0.5 rounded text-stone-300">Tap to move pin</span>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2 pt-1">
+            <div>
+              <label class="text-[10px] text-stone-400 block mb-0.5">Location Name</label>
+              <input type="text" id="form-location" required placeholder="e.g. Muddy Creek" class="w-full bg-stone-800 border border-stone-700 rounded-lg p-2 text-stone-100" />
+            </div>
+            <div>
+              <label class="text-[10px] text-stone-400 block mb-0.5">State</label>
+              <input type="text" id="form-state" required value="North Carolina" class="w-full bg-stone-800 border border-stone-700 rounded-lg p-2 text-stone-100" />
+            </div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 gap-2">
+          <div>
+            <label class="font-bold text-stone-300 block mb-1 text-[11px] uppercase tracking-wider">Date</label>
+            <input type="date" id="form-date" required class="w-full bg-stone-800 border border-stone-700 rounded-lg p-2 text-stone-100" />
+          </div>
+          <div>
+            <label class="font-bold text-stone-300 block mb-1 text-[11px] uppercase tracking-wider">Field Notes</label>
+            <textarea id="form-notes" rows="2" placeholder="Plumage, calling behavior..." class="w-full bg-stone-800 border border-stone-700 rounded-lg p-2 text-stone-100"></textarea>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2 pt-1">
+          <input type="checkbox" id="form-is-cover" class="rounded bg-stone-800 border-stone-700 text-emerald-600 focus:ring-0 w-4 h-4" />
+          <label for="form-is-cover" class="text-xs text-stone-300">Set as species Best / Cover Photo</label>
+        </div>
+      </div>
+
+      <div class="p-4 border-t border-stone-800 bg-stone-900/90 shrink-0">
+        <button type="button" onclick="saveSightingRecord()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs py-3 rounded-xl shadow transition active:scale-98">
+          Save Sighting
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Navigation -->
+  <nav class="h-16 border-t border-stone-800 bg-stone-900 px-3 flex items-center justify-around shrink-0 z-10">
+    <button onclick="switchTab('map')" id="nav-btn-map" class="flex flex-col items-center gap-1 text-emerald-400">
+      <i data-lucide="map" class="w-4 h-4"></i>
+      <span class="text-[10px] font-medium">Map</span>
+    </button>
+    <button onclick="switchTab('lifelist')" id="nav-btn-lifelist" class="flex flex-col items-center gap-1 text-stone-400">
+      <i data-lucide="list-ordered" class="w-4 h-4"></i>
+      <span class="text-[10px] font-medium">Life List</span>
+    </button>
+    <button onclick="switchTab('gallery')" id="nav-btn-gallery" class="flex flex-col items-center gap-1 text-stone-400">
+      <i data-lucide="images" class="w-4 h-4"></i>
+      <span class="text-[10px] font-medium">Gallery</span>
+    </button>
+    <button onclick="switchTab('radar')" id="nav-btn-radar" class="flex flex-col items-center gap-1 text-stone-400">
+      <i data-lucide="crosshair" class="w-4 h-4"></i>
+      <span class="text-[10px] font-medium">Radar</span>
+    </button>
+  </nav>
+
+  <script>
+    const STATE_CODES = {
+      'Alabama': 'US-AL', 'Alaska': 'US-AK', 'Arizona': 'US-AZ', 'Arkansas': 'US-AR', 'California': 'US-CA',
+      'Colorado': 'US-CO', 'Connecticut': 'US-CT', 'Delaware': 'US-DE', 'District of Columbia': 'US-DC', 'Florida': 'US-FL',
+      'Georgia': 'US-GA', 'Hawaii': 'US-HI', 'Idaho': 'US-ID', 'Illinois': 'US-IL', 'Indiana': 'US-IN',
+      'Iowa': 'US-IA', 'Kansas': 'US-KS', 'Kentucky': 'US-KY', 'Louisiana': 'US-LA', 'Maine': 'US-ME',
+      'Maryland': 'US-MD', 'Massachusetts': 'US-MA', 'Michigan': 'US-MI', 'Minnesota': 'US-MN', 'Mississippi': 'US-MS',
+      'Missouri': 'US-MO', 'Montana': 'US-MT', 'Nebraska': 'US-NE', 'Nevada': 'US-NV', 'New Hampshire': 'US-NH',
+      'New Jersey': 'US-NJ', 'New Mexico': 'US-NM', 'New York': 'US-NY', 'North Carolina': 'US-NC', 'North Dakota': 'US-ND',
+      'Ohio': 'US-OH', 'Oklahoma': 'US-OK', 'Oregon': 'US-OR', 'Pennsylvania': 'US-PA', 'Rhode Island': 'US-RI',
+      'South Carolina': 'US-SC', 'South Dakota': 'US-SD', 'Tennessee': 'US-TN', 'Texas': 'US-TX', 'Utah': 'US-UT',
+      'Vermont': 'US-VT', 'Virginia': 'US-VA', 'Washington': 'US-WA', 'West Virginia': 'US-WV', 'Wisconsin': 'US-WI', 'Wyoming': 'US-WY'
+    };
+
+    let DATABASE_TRUTH = { taxonomy: {}, states: {} };
+    let sqliteDB = null;
+    const CURRENT_MONTH = new Date().getMonth(); // 0-11
+
+    const SEED_SIGHTINGS = [
+      ['s1', 'tuftit', '2026-09-08', 36.0999, -80.2442, 'Reynolda Gardens', 'North Carolina', 'United States', 'Active in high canopy.', 'https://images.unsplash.com/photo-1548802673-380ab8ebc7b7?auto=format&fit=crop&w=800&q=85', 1],
+      ['s2', 'tuftit', '2026-08-20', 36.1200, -80.2600, 'Backyard Feeder', 'North Carolina', 'United States', 'Sunflower seeds.', 'https://images.unsplash.com/photo-1555169062-013468b47731?auto=format&fit=crop&w=800&q=85', 0],
+      ['s3', 'easblu', '2026-07-28', 36.1325, -80.2911, 'Muddy Creek Greenway', 'North Carolina', 'United States', 'Fence post perch.', 'https://images.unsplash.com/photo-1588167056547-d0c30953a5c3?auto=format&fit=crop&w=800&q=85', 1],
+      ['s4', 'norcar', '2026-03-10', 36.0999, -80.2442, 'Reynolda Gardens', 'North Carolina', 'United States', 'Vibrant singing male.', 'https://images.unsplash.com/photo-1579273166657-97598808df31?auto=format&fit=crop&w=800&q=85', 1],
+      ['s5', 'grnher', '2026-06-21', 36.0681, -80.2312, 'Salem Lake', 'North Carolina', 'United States', 'Stalking shore minnows.', 'https://images.unsplash.com/photo-1612178537253-bccd437b730e?auto=format&fit=crop&w=800&q=85', 1],
+      ['s6', 'ameavo', '2025-07-04', 38.9072, -77.0369, 'Constitution Gardens', 'District of Columbia', 'United States', 'Foraging shoreline.', 'https://images.unsplash.com/photo-1574063413132-355dbfd83e21?auto=format&fit=crop&w=800&q=85', 1]
+    ];
+
+    async function initDatabase() {
+      const SQL = await initSqlJs({
+        locateFile: file => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/${file}`
+      });
+
+      sqliteDB = new SQL.Database();
+      sqliteDB.run(`
+        CREATE TABLE sightings (
+          id TEXT PRIMARY KEY,
+          species_code TEXT,
+          date TEXT,
+          lat REAL,
+          lng REAL,
+          location_name TEXT,
+          state TEXT,
+          country TEXT,
+          notes TEXT,
+          photo_url TEXT,
+          is_cover INTEGER DEFAULT 0
+        );
+      `);
+
+      const stmt = sqliteDB.prepare("INSERT INTO sightings VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+      SEED_SIGHTINGS.forEach(row => stmt.run(row));
+      stmt.free();
+
+      // Load Scraped Truth Database from avian_ebird_data.json
+      try {
+        const res = await fetch('./avian_ebird_data.json');
+        if (res.ok) {
+          DATABASE_TRUTH = await res.json();
+          document.getElementById('data-status-badge').innerText = 'Truth JSON Loaded';
+        }
+      } catch (e) {
+        console.warn("avian_ebird_data.json not loaded yet, using baseline memory fallback");
+      }
+    }
+
+    function querySQL(sql, params = []) {
+      if (!sqliteDB) return [];
+      const stmt = sqliteDB.prepare(sql);
+      stmt.bind(params);
+      const results = [];
+      while (stmt.step()) results.push(stmt.getAsObject());
+      stmt.free();
+      return results;
+    }
+
+    function executeSQL(sql, params = []) {
+      if (!sqliteDB) return;
+      sqliteDB.run(sql, params);
+    }
+
+    let currentRegionLevel = 'state';
+    let activeState = 'North Carolina';
+    let currentTimeFilter = 'all';
+    let currentSpeciesFilter = 'all';
+
+    let mapInstance = null;
+    let markersLayer = null;
+    let pickerMap = null;
+    let pickerMarker = null;
+    let selectedCoords = { lat: 36.0999, lng: -80.2442 };
+    let originalImageObj = new Image();
+    let cropState = { x: 0, y: 0, scale: 1, isDragging: false, startX: 0, startY: 0 };
+    let modalDiscoveredList = [];
+    let modalMissingList = [];
+
+    function initMap() {
+      mapInstance = L.map('map', { zoomControl: false }).setView([36.0999, -80.2442], 11);
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap'
+      }).addTo(mapInstance);
+
+      markersLayer = L.layerGroup().addTo(mapInstance);
+      mapInstance.on('zoomend', () => renderMapMarkers());
+
+      let moveTimeout = null;
+      mapInstance.on('moveend', () => {
+        clearTimeout(moveTimeout);
+        moveTimeout = setTimeout(() => resolveStateLocation(), 200);
+      });
+
+      renderMapMarkers();
+      updateRegionalHUD();
+    }
+
+    async function resolveStateLocation() {
+      if (!mapInstance) return;
+      const center = mapInstance.getCenter();
+      try {
+        const res = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${center.lat}&longitude=${center.lng}&localityLanguage=en`);
+        const data = await res.json();
+        if (data && data.countryCode === 'US' && data.principalSubdivision) {
+          activeState = data.principalSubdivision;
+          updateRegionalHUD();
+          renderRadar();
+        }
+      } catch (err) {}
+    }
+
+    function setRegionLevel(level) {
+      currentRegionLevel = level;
+      document.getElementById('btn-level-state').className = level === 'state' ? 'text-[9px] px-3 py-0.5 rounded font-bold uppercase bg-emerald-600 text-white' : 'text-[9px] px-3 py-0.5 rounded font-bold uppercase text-stone-400';
+      document.getElementById('btn-level-country').className = level === 'country' ? 'text-[9px] px-3 py-0.5 rounded font-bold uppercase bg-emerald-600 text-white' : 'text-[9px] px-3 py-0.5 rounded font-bold uppercase text-stone-400';
+      updateRegionalHUD();
+    }
+
+    function updateRegionalHUD() {
+      const isCountry = currentRegionLevel === 'country';
+      const stateCode = STATE_CODES[activeState] || 'US-NC';
+      const stateEntry = DATABASE_TRUTH.states ? DATABASE_TRUTH.states[isCountry ? 'US' : stateCode] : null;
+
+      const baselineTotal = stateEntry ? stateEntry.count : (isCountry ? 1120 : 488);
+      const label = isCountry ? 'United States' : activeState;
+
+      const sql = isCountry 
+        ? "SELECT COUNT(DISTINCT species_code) as cnt FROM sightings WHERE country = 'United States'"
+        : "SELECT COUNT(DISTINCT species_code) as cnt FROM sightings WHERE LOWER(state) = LOWER(?)";
+      const params = isCountry ? [] : [activeState];
+
+      const loggedRes = querySQL(sql, params);
+      const count = loggedRes[0]?.cnt || 0;
+      const pct = baselineTotal > 0 ? ((count / baselineTotal) * 100).toFixed(1) : 0;
+
+      document.getElementById('region-label').innerText = label;
+      document.getElementById('region-stats').innerText = `${count} / ${baselineTotal} (${pct}%)`;
+      document.getElementById('region-bar').style.width = `${Math.min(100, pct)}%`;
+    }
+
+    function generateSparklineHTML(monthly) {
+      if (!monthly || monthly.length !== 12) return '';
+      return monthly.map((val, idx) => {
+        const height = Math.max(3, Math.min(14, Math.round(val * 16)));
+        const isActive = val > 0.05 ? 'active' : '';
+        const isCurrent = idx === CURRENT_MONTH ? 'current-month' : '';
+        return `<span class="sparkline-bar ${isActive} ${isCurrent}" style="height: ${height}px;"></span>`;
+      }).join('');
+    }
+
+    function getSeasonalityBadge(status) {
+      if (status === 'Year-round Resident') return '<span class="text-[9px] bg-emerald-950 text-emerald-400 border border-emerald-800 px-1.5 py-0.2 rounded font-medium">Year-round</span>';
+      if (status === 'Summer Breeding') return '<span class="text-[9px] bg-amber-950 text-amber-400 border border-amber-800 px-1.5 py-0.2 rounded font-medium">Summer Breeding</span>';
+      if (status === 'Winter Visitor') return '<span class="text-[9px] bg-blue-950 text-blue-400 border border-blue-800 px-1.5 py-0.2 rounded font-medium">Winter Visitor</span>';
+      if (status === 'Spring/Fall Migrant') return '<span class="text-[9px] bg-purple-950 text-purple-400 border border-purple-800 px-1.5 py-0.2 rounded font-medium">Migrant</span>';
+      return '<span class="text-[9px] bg-stone-800 text-stone-400 border border-stone-700 px-1.5 py-0.2 rounded font-medium">Seasonal</span>';
+    }
+
+    function openRegionSpeciesModal() {
+      const isCountry = currentRegionLevel === 'country';
+      const stateCode = STATE_CODES[activeState] || 'US-NC';
+      const stateEntry = DATABASE_TRUTH.states ? DATABASE_TRUTH.states[isCountry ? 'US' : stateCode] : null;
+      
+      document.getElementById('modal-region-title').innerText = isCountry ? 'United States' : activeState;
+      document.getElementById('checklist-search').value = '';
+
+      const discSQL = isCountry
+        ? "SELECT species_code, MAX(date) as last_logged, COUNT(id) as log_count, photo_url FROM sightings GROUP BY species_code"
+        : "SELECT species_code, MAX(date) as last_logged, COUNT(id) as log_count, photo_url FROM sightings WHERE LOWER(state) = LOWER(?) GROUP BY species_code";
+      const discParams = isCountry ? [] : [activeState];
+
+      const loggedSightings = querySQL(discSQL, discParams);
+      const discoveredCodeMap = new Map();
+      loggedSightings.forEach(s => {
+        const tax = (DATABASE_TRUTH.taxonomy && DATABASE_TRUTH.taxonomy[s.species_code]) || { comName: s.species_code.toUpperCase(), sciName: 'Aves sp.', family: 'Other' };
+        const season = (stateEntry && stateEntry.seasonality && stateEntry.seasonality[s.species_code]) || { status: 'Resident', monthly: [] };
+        discoveredCodeMap.set(s.species_code, {
+          species_code: s.species_code,
+          common_name: tax.comName,
+          scientific_name: tax.sciName,
+          family: tax.family,
+          status: season.status,
+          monthly: season.monthly,
+          last_logged: s.last_logged,
+          photo_url: s.photo_url,
+          log_count: s.log_count
+        });
+      });
+
+      modalDiscoveredList = Array.from(discoveredCodeMap.values());
+      modalMissingList = [];
+
+      const speciesRoster = stateEntry ? stateEntry.species : [];
+      speciesRoster.forEach(code => {
+        if (!discoveredCodeMap.has(code)) {
+          const tax = (DATABASE_TRUTH.taxonomy && DATABASE_TRUTH.taxonomy[code]) || { comName: code.toUpperCase(), sciName: 'Aves sp.', family: 'Other' };
+          const season = (stateEntry && stateEntry.seasonality && stateEntry.seasonality[code]) || { status: 'Seasonal', monthly: [] };
+          modalMissingList.push({
+            species_code: code,
+            common_name: tax.comName,
+            scientific_name: tax.sciName,
+            family: tax.family,
+            status: season.status,
+            monthly: season.monthly
+          });
+        }
+      });
+
+      const totalBaseline = stateEntry ? stateEntry.count : (modalDiscoveredList.length + modalMissingList.length);
+      document.getElementById('modal-discovered-count').innerText = modalDiscoveredList.length;
+      document.getElementById('modal-missing-count').innerText = modalMissingList.length;
+
+      const pct = totalBaseline > 0 ? ((modalDiscoveredList.length / totalBaseline) * 100).toFixed(1) : 0;
+      document.getElementById('modal-summary-pct').innerText = `${modalDiscoveredList.length} of ${totalBaseline} species documented (${pct}% complete)`;
+
+      renderChecklistViews();
+      switchRegionModalTab('discovered');
+      document.getElementById('region-species-modal').classList.remove('hidden');
+      lucide.createIcons();
+    }
+
+    function renderChecklistViews() {
+      const query = (document.getElementById('checklist-search').value || '').toLowerCase();
+
+      const filteredDisc = modalDiscoveredList.filter(item => 
+        item.common_name.toLowerCase().includes(query) || item.scientific_name.toLowerCase().includes(query)
+      );
+
+      const discContainer = document.getElementById('modal-discovered-view');
+      if (filteredDisc.length === 0) {
+        discContainer.innerHTML = '<div class="text-center py-8 text-stone-500">No matching discovered species.</div>';
+      } else {
+        discContainer.innerHTML = filteredDisc.map(item => `
+          <div onclick="closeRegionSpeciesModal(); openSpeciesDossier('${item.species_code}')" class="bg-stone-950/70 border border-stone-800 p-2.5 rounded-xl flex items-center justify-between hover:border-stone-600 transition cursor-pointer">
+            <div class="flex items-center gap-3">
+              <div class="w-12 h-12 rounded-lg bg-stone-800 overflow-hidden shrink-0 border border-stone-700">
+                ${item.photo_url ? `<img src="${item.photo_url}" class="w-full h-full object-cover" />` : '<div class="h-full flex items-center justify-center text-[10px] text-stone-500">No Photo</div>'}
+              </div>
+              <div>
+                <div class="flex items-center gap-1.5">
+                  <h4 class="font-bold text-stone-100 text-xs">${item.common_name}</h4>
+                  ${getSeasonalityBadge(item.status)}
+                </div>
+                <div class="text-[10px] text-stone-400 italic">${item.scientific_name}</div>
+                <div class="flex items-center gap-2 mt-1">
+                  <div class="flex items-end h-3">${generateSparklineHTML(item.monthly)}</div>
+                  <span class="text-[9px] text-stone-500 font-mono">Latest: ${item.last_logged}</span>
+                </div>
+              </div>
+            </div>
+            <span class="bg-stone-800 text-stone-300 font-mono text-[10px] px-2 py-0.5 rounded border border-stone-700">${item.log_count} logs</span>
+          </div>
+        `).join('');
+      }
+
+      const filteredMiss = modalMissingList.filter(item => 
+        item.common_name.toLowerCase().includes(query) || 
+        item.scientific_name.toLowerCase().includes(query) || 
+        (item.family && item.family.toLowerCase().includes(query)) ||
+        (item.status && item.status.toLowerCase().includes(query))
+      );
+
+      const missContainer = document.getElementById('modal-missing-view');
+      if (filteredMiss.length === 0) {
+        missContainer.innerHTML = '<div class="text-center py-8 text-stone-500">No matching targets found.</div>';
+      } else {
+        missContainer.innerHTML = filteredMiss.map(item => `
+          <div class="bg-stone-950/70 border border-stone-800 p-2.5 rounded-xl flex items-center justify-between hover:border-emerald-700/50 transition">
+            <div>
+              <div class="flex items-center gap-1.5">
+                <h4 class="font-bold text-stone-200 text-xs">${item.common_name}</h4>
+                ${getSeasonalityBadge(item.status)}
+              </div>
+              <div class="text-[10px] text-stone-400 italic">${item.scientific_name}</div>
+              <div class="flex items-end h-3 mt-1.5">${generateSparklineHTML(item.monthly)}</div>
+            </div>
+            <button onclick="closeRegionSpeciesModal(); openUploadModal(); document.getElementById('form-species').value='${item.species_code}';" class="bg-emerald-700/80 hover:bg-emerald-600 text-white text-[11px] font-medium px-2.5 py-1.5 rounded-lg flex items-center gap-1">
+              <i data-lucide="plus" class="w-3 h-3"></i> Log
+            </button>
+          </div>
+        `).join('');
+      }
+
+      lucide.createIcons();
+    }
+
+    function switchRegionModalTab(tab) {
+      const isDisc = tab === 'discovered';
+      document.getElementById('modal-discovered-view').classList.toggle('hidden', !isDisc);
+      document.getElementById('modal-missing-view').classList.toggle('hidden', isDisc);
+      document.getElementById('tab-btn-discovered').className = isDisc ? 'flex-1 py-2 rounded-lg text-xs font-semibold bg-emerald-600 text-white flex items-center justify-center gap-1.5' : 'flex-1 py-2 rounded-lg text-xs font-semibold text-stone-400 flex items-center justify-center gap-1.5';
+      document.getElementById('tab-btn-missing').className = !isDisc ? 'flex-1 py-2 rounded-lg text-xs font-semibold bg-emerald-600 text-white flex items-center justify-center gap-1.5' : 'flex-1 py-2 rounded-lg text-xs font-semibold text-stone-400 flex items-center justify-center gap-1.5';
+    }
+
+    function closeRegionSpeciesModal() {
+      document.getElementById('region-species-modal').classList.add('hidden');
+    }
+
+    function setTimeFilter(filter) {
+      currentTimeFilter = filter;
+      ['7d', '30d', '1y', 'all'].forEach(f => {
+        document.getElementById('btn-time-' + f).className = (f === filter) ? 'text-[10px] px-2 py-1 rounded font-semibold bg-emerald-600 text-white' : 'text-[10px] px-2 py-1 rounded font-semibold text-stone-400';
+      });
+      renderMapMarkers();
+    }
+
+    function applyMapFilters() {
+      currentSpeciesFilter = document.getElementById('map-species-filter').value;
+      renderMapMarkers();
+    }
+
+    function renderMapMarkers() {
+      if (!markersLayer || !sqliteDB) return;
+      markersLayer.clearLayers();
+
+      const currentZoom = mapInstance.getZoom();
+      const showPhotoChits = currentZoom >= 11;
+
+      let sql = "SELECT * FROM sightings WHERE 1=1";
+      const params = [];
+      if (currentSpeciesFilter !== 'all') {
+        sql += " AND species_code = ?";
+        params.push(currentSpeciesFilter);
+      }
+
+      const allSightings = querySQL(sql, params);
+      const now = new Date();
+
+      const filtered = allSightings.filter(s => {
+        if (currentTimeFilter === 'all') return true;
+        const diffDays = (now - new Date(s.date)) / (1000 * 60 * 60 * 24);
+        if (currentTimeFilter === '7d') return diffDays <= 7;
+        if (currentTimeFilter === '30d') return diffDays <= 30;
+        if (currentTimeFilter === '1y') return diffDays <= 365;
+        return true;
+      });
+
+      filtered.forEach(s => {
+        const tax = (DATABASE_TRUTH.taxonomy && DATABASE_TRUTH.taxonomy[s.species_code]) || { comName: s.species_code.toUpperCase() };
+        let marker;
+        if (showPhotoChits && s.photo_url) {
+          const chitIcon = L.divIcon({
+            className: 'bird-chit-icon',
+            html: '',
+            iconSize: [40, 40],
+            iconAnchor: [20, 20]
+          });
+          marker = L.marker([s.lat, s.lng], { icon: chitIcon });
+          marker.on('add', () => {
+            const el = marker.getElement();
+            if (el) el.style.backgroundImage = `url('${s.photo_url}')`;
+          });
+        } else {
+          marker = L.circleMarker([s.lat, s.lng], {
+            radius: 8,
+            fillColor: '#059669',
+            color: '#ffffff',
+            weight: 2,
+            fillOpacity: 0.95
+          });
+        }
+
+        const popup = `
+          <div style="min-width: 170px; font-family: sans-serif; color: #f5f5f4; padding: 6px;">
+            ${s.photo_url ? `<img src="${s.photo_url}" style="width: 100%; aspect-ratio: 1/1; object-fit: cover; border-radius: 8px; margin-bottom: 6px;" />` : ''}
+            <div style="font-weight: 700; font-size: 13px;">${tax.comName}</div>
+            <div style="font-size: 10px; color: #a8a29e; margin-top: 3px;">📍 ${s.location_name}<br>📅 ${s.date}</div>
+            ${s.notes ? `<div style="font-size: 10px; color: #d6d3d1; margin-top: 4px; font-style: italic;">"${s.notes}"</div>` : ''}
+          </div>
+        `;
+        marker.bindPopup(popup);
+        markersLayer.addLayer(marker);
+      });
+    }
+
+    function renderLifeList() {
+      const sort = document.getElementById('lifelist-sort').value;
+      let orderBy = "MIN(date) ASC";
+      if (sort === 'recent') orderBy = "MAX(date) DESC";
+      if (sort === 'count') orderBy = "COUNT(id) DESC";
+
+      const sql = `
+        SELECT species_code, MIN(date) as first_logged, MAX(date) as last_logged,
+               COUNT(id) as log_count,
+               COALESCE(MAX(CASE WHEN is_cover = 1 THEN photo_url END), MAX(photo_url)) as cover_photo,
+               MAX(location_name) as top_location
+        FROM sightings
+        GROUP BY species_code
+        ORDER BY ${orderBy}
+      `;
+
+      let list = querySQL(sql);
+      list = list.map(item => {
+        const tax = (DATABASE_TRUTH.taxonomy && DATABASE_TRUTH.taxonomy[item.species_code]) || { comName: item.species_code.toUpperCase(), sciName: '' };
+        return { ...item, common_name: tax.comName, scientific_name: tax.sciName };
+      });
+
+      if (sort === 'alpha') list.sort((a, b) => a.common_name.localeCompare(b.common_name));
+
+      document.getElementById('lifelist-subtitle').innerText = `${list.length} Lifers documented`;
+      const grid = document.getElementById('lifelist-grid');
+
+      grid.innerHTML = list.map(item => `
+        <div onclick="openSpeciesDossier('${item.species_code}')" class="bg-stone-900 border border-stone-800 hover:border-stone-600 rounded-xl overflow-hidden shadow flex flex-col cursor-pointer">
+          <div class="relative w-full aspect-square bg-stone-950">
+            ${item.cover_photo 
+              ? `<img src="${item.cover_photo}" class="w-full h-full object-cover" />` 
+              : `<div class="h-full flex items-center justify-center text-xs text-stone-600">No Photo</div>`}
+            <span class="absolute top-1.5 right-1.5 bg-stone-900/80 backdrop-blur text-[10px] font-mono px-1.5 py-0.5 rounded border border-stone-700">${item.log_count} logs</span>
+          </div>
+          <div class="p-2.5 flex-1 flex flex-col justify-between">
+            <div>
+              <h3 class="font-bold text-xs leading-snug line-clamp-1">${item.common_name}</h3>
+              <p class="text-[10px] text-stone-400 italic mb-2 line-clamp-1">${item.scientific_name}</p>
+            </div>
+            <div class="text-[10px] space-y-0.5 text-stone-400 border-t border-stone-800 pt-1.5 font-mono">
+              <div class="flex justify-between"><span>Lifer:</span> <span class="text-stone-200">${item.first_logged.slice(5)}</span></div>
+              <div class="flex justify-between truncate"><span>Top:</span> <span class="text-stone-200 truncate ml-1">${item.top_location}</span></div>
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function openSpeciesDossier(speciesCode) {
+      const sightings = querySQL("SELECT id FROM sightings WHERE species_code = ? ORDER BY is_cover DESC, date DESC LIMIT 1", [speciesCode]);
+      if (sightings.length > 0) openDetailModal(sightings[0].id);
+    }
+
+    function renderGallery() {
+      const filter = document.getElementById('gallery-species-filter').value;
+      let sql = "SELECT * FROM sightings WHERE photo_url IS NOT NULL AND photo_url != ''";
+      const params = [];
+      if (filter !== 'all') {
+        sql += " AND species_code = ?";
+        params.push(filter);
+      }
+      sql += " ORDER BY date DESC";
+
+      const photos = querySQL(sql, params);
+      document.getElementById('gallery-subtitle').innerText = `${photos.length} photos`;
+      const grid = document.getElementById('gallery-grid');
+
+      grid.innerHTML = photos.map(photo => {
+        const tax = (DATABASE_TRUTH.taxonomy && DATABASE_TRUTH.taxonomy[photo.species_code]) || { comName: photo.species_code.toUpperCase() };
+        return `
+          <div onclick="openDetailModal('${photo.id}')" class="bg-stone-900 border border-stone-800 hover:border-stone-600 rounded-xl overflow-hidden shadow flex flex-col cursor-pointer">
+            <div class="relative w-full aspect-square bg-stone-950">
+              <img src="${photo.photo_url}" class="w-full h-full object-cover" />
+              ${photo.is_cover === 1 ? '<span class="absolute bottom-1.5 left-1.5 text-[9px] font-bold bg-amber-500 text-stone-950 px-1.5 py-0.2 rounded uppercase">Best Photo</span>' : ''}
+            </div>
+            <div class="p-2">
+              <h4 class="font-bold text-xs line-clamp-1">${tax.comName}</h4>
+              <span class="text-[10px] text-stone-400 font-mono">${photo.date}</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function openDetailModal(sightingId) {
+      const res = querySQL("SELECT * FROM sightings WHERE id = ?", [sightingId]);
+      if (res.length === 0) return;
+      const s = res[0];
+      const tax = (DATABASE_TRUTH.taxonomy && DATABASE_TRUTH.taxonomy[s.species_code]) || { comName: s.species_code.toUpperCase(), sciName: 'Aves sp.' };
+
+      document.getElementById('detail-img').src = s.photo_url;
+      document.getElementById('detail-common-name').innerText = tax.comName;
+      document.getElementById('detail-scientific-name').innerText = tax.sciName;
+      document.getElementById('detail-date').innerText = s.date;
+      document.getElementById('detail-location').innerText = s.location_name;
+      document.getElementById('detail-state').innerText = s.state;
+      document.getElementById('detail-coords').innerText = `${s.lat.toFixed(4)}, ${s.lng.toFixed(4)}`;
+
+      const notesContainer = document.getElementById('detail-notes-container');
+      if (s.notes) {
+        notesContainer.classList.remove('hidden');
+        document.getElementById('detail-notes').innerText = `"${s.notes}"`;
+      } else {
+        notesContainer.classList.add('hidden');
+      }
+
+      const btnCover = document.getElementById('btn-toggle-cover-detail');
+      btnCover.onclick = () => {
+        executeSQL("UPDATE sightings SET is_cover = 0 WHERE species_code = ?", [s.species_code]);
+        executeSQL("UPDATE sightings SET is_cover = 1 WHERE id = ?", [s.id]);
+        renderGallery();
+        renderLifeList();
+        openDetailModal(s.id);
+      };
+      btnCover.innerHTML = s.is_cover === 1 ? '<i data-lucide="check" class="w-3.5 h-3.5 text-amber-400"></i> Best Photo' : '<i data-lucide="star" class="w-3.5 h-3.5"></i> Set as Best Photo';
+
+      const siblings = querySQL("SELECT id, photo_url, date FROM sightings WHERE species_code = ? ORDER BY date DESC", [s.species_code]);
+      document.getElementById('detail-sibling-count').innerText = siblings.length;
+      const sibContainer = document.getElementById('detail-siblings');
+
+      sibContainer.innerHTML = siblings.map(item => `
+        <div onclick="openDetailModal('${item.id}')" class="shrink-0 w-16 cursor-pointer">
+          <div class="w-16 h-16 rounded-lg overflow-hidden border ${item.id === s.id ? 'border-emerald-500 ring-2 ring-emerald-500/40' : 'border-stone-700 opacity-70'}">
+            <img src="${item.photo_url}" class="w-full h-full object-cover" />
+          </div>
+          <span class="text-[9px] text-stone-400 font-mono block text-center mt-0.5 truncate">${item.date.slice(5)}</span>
+        </div>
+      `).join('');
+
+      document.getElementById('detail-modal').classList.remove('hidden');
+      lucide.createIcons();
+    }
+
+    function closeDetailModal() {
+      document.getElementById('detail-modal').classList.add('hidden');
+    }
+
+    function renderRadar() {
+      const stateCode = STATE_CODES[activeState] || 'US-NC';
+      const stateEntry = DATABASE_TRUTH.states ? DATABASE_TRUTH.states[stateCode] : null;
+      const logged = querySQL("SELECT DISTINCT species_code FROM sightings");
+      const loggedCodes = new Set(logged.map(l => l.species_code));
+
+      const targets = [];
+      const speciesRoster = stateEntry ? stateEntry.species : [];
+      speciesRoster.forEach(code => {
+        if (!loggedCodes.has(code)) {
+          const tax = (DATABASE_TRUTH.taxonomy && DATABASE_TRUTH.taxonomy[code]) || { comName: code.toUpperCase(), sciName: 'Aves sp.' };
+          const season = (stateEntry && stateEntry.seasonality && stateEntry.seasonality[code]) || { status: 'Seasonal', monthly: [] };
+          const prob = season.monthly ? (season.monthly[CURRENT_MONTH] || 0.05) : 0.05;
+          targets.push({
+            code,
+            comName: tax.comName,
+            sciName: tax.sciName,
+            status: season.status,
+            prob: prob,
+            monthly: season.monthly
+          });
+        }
+      });
+
+      targets.sort((a, b) => b.prob - a.prob);
+
+      const container = document.getElementById('radar-list');
+      if (targets.length === 0) {
+        container.innerHTML = '<div class="text-center py-8 text-stone-500">All regional targets logged!</div>';
+        return;
+      }
+
+      container.innerHTML = targets.slice(0, 15).map(t => `
+        <div class="bg-stone-900 border border-stone-800 p-3.5 rounded-xl flex items-center justify-between">
+          <div>
+            <div class="flex items-center gap-1.5">
+              <h4 class="font-bold text-xs">${t.comName}</h4>
+              ${getSeasonalityBadge(t.status)}
+            </div>
+            <div class="text-[10px] text-stone-400 italic">${t.sciName}</div>
+            <div class="flex items-center gap-2 mt-1.5">
+              <div class="flex items-end h-3">${generateSparklineHTML(t.monthly)}</div>
+              <span class="text-[10px] text-emerald-400 font-mono">${(t.prob * 100).toFixed(0)}% frequency now</span>
+            </div>
+          </div>
+          <button onclick="openUploadModal(); document.getElementById('form-species').value='${t.code}';" class="bg-stone-800 text-stone-200 text-xs px-2.5 py-1.5 rounded-lg border border-stone-700 font-medium">Log</button>
+        </div>
+      `).join('');
+
+      lucide.createIcons();
+    }
+
+    // --- CROPPER ENGINE ---
+    function handleImageSelection(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        originalImageObj.onload = () => {
+          document.getElementById('cropper-container').classList.remove('hidden');
+          const img = document.getElementById('crop-image');
+          img.src = originalImageObj.src;
+          resetCrop();
+        };
+        originalImageObj.src = event.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function resetCrop() {
+      cropState.scale = 1; cropState.x = 0; cropState.y = 0;
+      document.getElementById('crop-zoom').value = 1;
+      const viewport = document.getElementById('crop-viewport');
+      const img = document.getElementById('crop-image');
+      const vWidth = viewport.clientWidth, vHeight = viewport.clientHeight;
+      if (originalImageObj.width / originalImageObj.height > 1) {
+        img.style.height = `${vHeight}px`; img.style.width = 'auto';
+      } else {
+        img.style.width = `${vWidth}px`; img.style.height = 'auto';
+      }
+      updateCropTransform();
+    }
+
+    function updateCropTransform() {
+      cropState.scale = parseFloat(document.getElementById('crop-zoom').value);
+      const img = document.getElementById('crop-image');
+      const viewport = document.getElementById('crop-viewport');
+      const offsetX = (viewport.clientWidth - img.offsetWidth) / 2;
+      const offsetY = (viewport.clientHeight - img.offsetHeight) / 2;
+      img.style.transform = `translate(${offsetX + cropState.x}px, ${offsetY + cropState.y}px) scale(${cropState.scale})`;
+    }
+
+    const cropViewport = document.getElementById('crop-viewport');
+    function startDrag(clientX, clientY) { cropState.isDragging = true; cropState.startX = clientX - cropState.x; cropState.startY = clientY - cropState.y; }
+    function moveDrag(clientX, clientY) { if (!cropState.isDragging) return; cropState.x = clientX - cropState.startX; cropState.y = clientY - cropState.startY; updateCropTransform(); }
+    function endDrag() { cropState.isDragging = false; }
+
+    cropViewport.addEventListener('mousedown', (e) => startDrag(e.clientX, e.clientY));
+    window.addEventListener('mousemove', (e) => moveDrag(e.clientX, e.clientY));
+    window.addEventListener('mouseup', endDrag);
+    cropViewport.addEventListener('touchstart', (e) => { if (e.touches.length === 1) startDrag(e.touches[0].clientX, e.touches[0].clientY); });
+    window.addEventListener('touchmove', (e) => { if (e.touches.length === 1) moveDrag(e.touches[0].clientX, e.touches[0].clientY); });
+    window.addEventListener('touchend', endDrag);
+
+    function generateCroppedDataUrl() {
+      if (!originalImageObj.src || !document.getElementById('crop-image').src) return null;
+      const canvas = document.createElement('canvas');
+      const size = 700;
+      canvas.width = size; canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      const viewport = document.getElementById('crop-viewport');
+      const img = document.getElementById('crop-image');
+      const vSize = viewport.clientWidth, ratio = size / vSize;
+
+      const renderedWidth = img.offsetWidth * cropState.scale;
+      const renderedHeight = img.offsetHeight * cropState.scale;
+      const renderedLeft = ((vSize - img.offsetWidth) / 2 + cropState.x) - ((renderedWidth - img.offsetWidth) / 2);
+      const renderedTop = ((vSize - img.offsetHeight) / 2 + cropState.y) - ((renderedHeight - img.offsetHeight) / 2);
+
+      ctx.fillStyle = '#0c0a09'; ctx.fillRect(0, 0, size, size);
+      ctx.drawImage(originalImageObj, renderedLeft * ratio, renderedTop * ratio, renderedWidth * ratio, renderedHeight * ratio);
+      return canvas.toDataURL('image/jpeg', 0.9);
+    }
+
+    function fetchGPSLocation() {
+      const btn = document.getElementById('btn-gps');
+      btn.innerHTML = '<span class="animate-spin text-xs">🌀</span> Locating...';
+      navigator.geolocation.getCurrentPosition(async (pos) => {
+        const { latitude, longitude } = pos.coords;
+        setFormCoordinates(latitude, longitude);
+        try {
+          const res = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`);
+          const data = await res.json();
+          if (data && data.principalSubdivision) {
+            document.getElementById('form-state').value = data.principalSubdivision;
+            document.getElementById('form-location').value = data.locality || data.city || 'Field Sighting';
+          }
+        } catch (e) {}
+        btn.innerHTML = '<i data-lucide="check" class="w-3.5 h-3.5 text-emerald-400"></i> GPS Locked';
+        lucide.createIcons();
+      }, (err) => {
+        btn.innerHTML = '<i data-lucide="navigation" class="w-3.5 h-3.5 text-emerald-400"></i> Use My GPS';
+        lucide.createIcons();
+      }, { enableHighAccuracy: true });
+    }
+
+    function setFormCoordinates(lat, lng) {
+      selectedCoords = { lat, lng };
+      if (pickerMarker) pickerMarker.setLatLng([lat, lng]);
+      if (pickerMap) pickerMap.setView([lat, lng], 13);
+    }
+
+    function togglePickerMap() {
+      const drawer = document.getElementById('picker-map-drawer');
+      drawer.classList.toggle('hidden');
+      if (!pickerMap) {
+        pickerMap = L.map('picker-map', { zoomControl: false }).setView([selectedCoords.lat, selectedCoords.lng], 12);
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18 }).addTo(pickerMap);
+        pickerMarker = L.marker([selectedCoords.lat, selectedCoords.lng], { draggable: true }).addTo(pickerMap);
+        pickerMarker.on('dragend', (e) => setFormCoordinates(e.target.getLatLng().lat, e.target.getLatLng().lng));
+        pickerMap.on('click', (e) => setFormCoordinates(e.latlng.lat, e.latlng.lng));
+      }
+      setTimeout(() => pickerMap.invalidateSize(), 150);
+    }
+
+    function saveSightingRecord() {
+      const speciesCode = document.getElementById('form-species').value;
+      const location = document.getElementById('form-location').value || 'Field Observation';
+      const date = document.getElementById('form-date').value;
+      const state = document.getElementById('form-state').value || activeState;
+      const notes = document.getElementById('form-notes').value;
+      const isCover = document.getElementById('form-is-cover').checked ? 1 : 0;
+      let photoUrl = generateCroppedDataUrl() || 'https://images.unsplash.com/photo-1548802673-380ab8ebc7b7?auto=format&fit=crop&w=800&q=85';
+
+      const id = 's_' + Date.now();
+      if (isCover === 1) executeSQL("UPDATE sightings SET is_cover = 0 WHERE species_code = ?", [speciesCode]);
+      executeSQL("INSERT INTO sightings VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", [id, speciesCode, date, selectedCoords.lat, selectedCoords.lng, location, state, 'United States', notes, photoUrl, isCover]);
+
+      closeUploadModal();
+      renderMapMarkers();
+      updateRegionalHUD();
+      renderLifeList();
+      renderGallery();
+      populateFilterDropdowns();
+      renderRadar();
+    }
+
+    function openUploadModal() {
+      document.getElementById('form-date').value = new Date().toISOString().split('T')[0];
+      document.getElementById('upload-modal').classList.remove('hidden');
+    }
+
+    function closeUploadModal() {
+      document.getElementById('upload-modal').classList.add('hidden');
+      document.getElementById('cropper-container').classList.add('hidden');
+      document.getElementById('picker-map-drawer').classList.add('hidden');
+      document.getElementById('crop-image').src = '';
+      document.getElementById('form-file').value = '';
+    }
+
+    function switchTab(tab) {
+      document.getElementById('view-map').classList.toggle('hidden', tab !== 'map');
+      document.getElementById('view-lifelist').classList.toggle('hidden', tab !== 'lifelist');
+      document.getElementById('view-gallery').classList.toggle('hidden', tab !== 'gallery');
+      document.getElementById('view-radar').classList.toggle('hidden', tab !== 'radar');
+
+      ['map', 'lifelist', 'gallery', 'radar'].forEach(t => {
+        document.getElementById('nav-btn-' + t).className = t === tab ? 'flex flex-col items-center gap-1 text-emerald-400' : 'flex flex-col items-center gap-1 text-stone-400';
+      });
+
+      if (tab === 'map' && mapInstance) setTimeout(() => mapInstance.invalidateSize(), 200);
+      if (tab === 'radar') renderRadar();
+    }
+
+    function populateFilterDropdowns() {
+      const mapFilter = document.getElementById('map-species-filter');
+      const galleryFilter = document.getElementById('gallery-species-filter');
+      const uploadSelect = document.getElementById('form-species');
+
+      const loggedCodes = querySQL("SELECT DISTINCT species_code FROM sightings");
+      mapFilter.innerHTML = '<option value="all">All Species</option>';
+      galleryFilter.innerHTML = '<option value="all">All Species</option>';
+      uploadSelect.innerHTML = '';
+
+      loggedCodes.forEach(row => {
+        const tax = (DATABASE_TRUTH.taxonomy && DATABASE_TRUTH.taxonomy[row.species_code]) || { comName: row.species_code.toUpperCase() };
+        mapFilter.innerHTML += `<option value="${row.species_code}">${tax.comName}</option>`;
+        galleryFilter.innerHTML += `<option value="${row.species_code}">${tax.comName}</option>`;
+      });
+
+      const fullTax = DATABASE_TRUTH.taxonomy || {};
+      Object.entries(fullTax).forEach(([code, tax]) => {
+        uploadSelect.innerHTML += `<option value="${code}">${tax.comName} (${tax.sciName})</option>`;
+      });
+    }
+
+    window.addEventListener('DOMContentLoaded', async () => {
+      await initDatabase();
+      initMap();
+      populateFilterDropdowns();
+      renderLifeList();
+      renderGallery();
+      renderRadar();
+      lucide.createIcons();
+    });
+  </script>
+</body>
+</html>
