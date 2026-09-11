@@ -1,0 +1,2508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>BirdsEye — Find what's flying.</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+  <style>
+    :root { --bg:#0c0a09; --panel:#1c1917; --line:#292524; --muted:#a8a29e; --text:#f5f5f4; --em:#059669; --em2:#10b981; }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; background: var(--bg); color: var(--text); font-family: ui-sans-serif, system-ui, sans-serif; overflow: hidden; }
+    button, select, input, textarea { font: inherit; color: inherit; }
+    button { cursor: pointer; }
+    header, nav { height: 56px; display: flex; align-items: center; background: #1c1917; border-color: #292524; z-index: 20; }
+    header { border-bottom: 1px solid #292524; justify-content: space-between; padding: 0 16px; }
+    nav { border-top: 1px solid #292524; justify-content: space-around; }
+    main { height: calc(100% - 112px); position: relative; overflow: hidden; }
+    .brand { display: flex; gap: 8px; align-items: center; }
+    .logo { width: 28px; height: 28px; border-radius: 8px; background: #0c0a09; border: 1px solid #065f46; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+    .logo svg { width: 22px; height: 22px; display: block; }
+    h1 { font-size: 16px; margin: 0; }
+    .sub { font-size: 10px; color: #a8a29e; }
+    .badge { font-size: 9px; font-family: ui-monospace, monospace; border: 1px solid #065f46; background: #022c22; color: #34d399; padding: 1px 4px; border-radius: 4px; }
+    .btn-em { background: #059669; color: #fff; border: 0; border-radius: 8px; padding: 6px 12px; font-size: 12px; font-weight: 600; }
+    .btn-em:hover { background: #10b981; }
+    .nav-btn { background: none; border: 0; color: #a8a29e; font-size: 10px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+    .nav-btn.on { color: #34d399; }
+    .view { position: absolute; inset: 0; display: none; }
+    .view.on { display: block; }
+    #view-map.on { display: block; }
+    #map { height: 100%; width: 100%; background: #111; }
+    .overlay-top { position: absolute; top: 12px; left: 12px; z-index: 2000; pointer-events: auto; }
+    .overlay-right { position: absolute; top: 12px; right: 12px; z-index: 2000; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; pointer-events: auto; }
+    #map { z-index: 1; }
+    .seg { display: flex; background: rgba(28,25,23,.92); border: 1px solid #44403c; border-radius: 8px; padding: 2px; }
+    .seg button { background: none; border: 0; color: #a8a29e; font-size: 10px; font-weight: 600; padding: 4px 8px; border-radius: 6px; }
+    .seg button.on { background: #059669; color: #fff; }
+    .toolbar { background: rgba(28,25,23,.94); border: 1px solid #44403c; border-radius: 12px; padding: 4px; display: flex; flex-wrap: wrap; gap: 3px; align-items: center; width: 196px; max-width: 46vw; }
+    .toolbar .seg { margin: 0; background: #0c0a09; }
+    .toolbar .seg button { padding: 3px 6px; font-size: 10px; line-height: 1.15; }
+    select.mini { background: rgba(28,25,23,.92); border: 1px solid #44403c; border-radius: 8px; padding: 6px 8px; font-size: 12px; max-width: 140px; }
+    .hud { position: absolute; bottom: 12px; left: 12px; right: 12px; z-index: 1000; background: rgba(28,25,23,.96); border: 1px solid #292524; border-radius: 12px; padding: 12px; }
+    .hud-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .hud-label { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #34d399; }
+    .row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+    #region-label { background: none; border: 0; color: #f5f5f4; font-weight: 700; font-size: 13px; text-decoration: underline dotted #78716c; max-width: 70%; text-align: left; }
+    #region-stats { font-family: ui-monospace, monospace; color: #34d399; font-weight: 700; font-size: 12px; }
+    .bar { height: 6px; background: #292524; border-radius: 99px; overflow: hidden; margin-top: 8px; }
+    .bar > div { height: 100%; width: 0; background: #10b981; }
+    .center-dot { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); pointer-events: none; z-index: 500; opacity: .4; width: 16px; height: 16px; border: 1px solid #34d39980; border-radius: 50%; }
+    .center-dot::after { content: ""; position: absolute; inset: 6px; background: #34d399; border-radius: 50%; }
+    .scroll { overflow: auto; height: 100%; padding: 12px 12px 24px; }
+    .list-head { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #292524; padding-bottom: 12px; gap: 8px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 8px; margin-top: 12px; }
+    .card { background: #1c1917; border: 1px solid #292524; border-radius: 10px; overflow: hidden; cursor: pointer; position: relative; }
+    .card.cover { border-color: #292524; }
+    .cover-mark {
+      position: absolute; top: 8px; left: 8px; width: 22px; height: 22px;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(12,10,9,.7); border: 1px solid rgba(251,191,36,.65);
+      border-radius: 50%; box-shadow: 0 2px 6px rgba(0,0,0,.35);
+    }
+    .cover-mark svg { display: block; }
+    .card img, .ph { width: 100%; height: auto; aspect-ratio: 1; object-fit: contain; background: #0c0a09; display: block; }
+    .ph { display: flex; align-items: center; justify-content: center; color: #57534e; font-size: 12px; height: 132px; }
+    .bird-chit { background: transparent; border: 0; }
+    .card .meta { padding: 8px; }
+    .card h3, .card h4 { margin: 0; font-size: 12px; }
+    .muted { color: #a8a29e; font-size: 10px; }
+    .mono { font-family: ui-monospace, monospace; }
+    .modal { position: fixed; inset: 0; background: rgba(0,0,0,.88); display: none; align-items: center; justify-content: center; padding: 12px; z-index: 5000; overflow: auto; }
+    .modal.on { display: flex; }
+    .sheet { background: #1c1917; border: 1px solid #44403c; border-radius: 16px; width: 100%; max-width: 32rem; max-height: 96vh; height: min(96vh, 860px); display: flex; flex-direction: column; overflow: hidden; }
+    .sheet-h, .sheet-f { padding: 12px 16px; border-color: #292524; display: flex; justify-content: space-between; align-items: center; }
+    #region-species-modal .sheet-h { border-bottom: 0; padding-bottom: 8px; }
+    .check-kicker { font-size: 9px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #78716c; margin: 0 0 6px; padding-top: 8px; border-top: 1px solid #44403c; }
+    .detail-actions { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 6px; }
+    .detail-actions button { width: 100%; padding: 8px 6px; font-size: 11px; }
+    .coord-link { background: none; border: 0; padding: 0; color: #34d399; font-family: ui-monospace, monospace; font-size: 12px; text-decoration: underline dotted #34d39980; cursor: pointer; text-align: left; }
+    .sheet-h { border-bottom: 1px solid #292524; }
+    .sheet-f { border-top: 1px solid #292524; }
+    .sheet-b { padding: 10px 12px 16px; overflow: auto; flex: 1; min-height: 0; font-size: 12px; }
+    .x { background: none; border: 0; color: #a8a29e; font-size: 16px; }
+    .field { margin-bottom: 12px; }
+    .field label { display: block; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #d6d3d1; margin-bottom: 4px; }
+    input[type=text], input[type=date], textarea, select {
+      width: 100%; background: #292524; border: 1px solid #44403c; border-radius: 8px; padding: 8px; color: #f5f5f4;
+    }
+    .results { position: absolute; left: 0; right: 0; top: 100%; max-height: 180px; overflow: auto; background: #1c1917; border: 1px solid #44403c; border-radius: 8px; z-index: 30; display: none; }
+    .results.on { display: block; }
+    .results button { display: block; width: 100%; text-align: left; background: none; border: 0; border-bottom: 1px solid #292524; padding: 8px 12px; }
+    .results button:hover { background: #292524; }
+    .rel { position: relative; }
+    .chip { font-size: 9px; padding: 1px 6px; border-radius: 4px; border: 1px solid #44403c; color: #a8a29e; }
+    .chip.y { background: #022c22; color: #34d399; border-color: #065f46; }
+    .chip.s { background: #451a03; color: #fbbf24; border-color: #92400e; }
+    .chip.w { background: #1e3a8a33; color: #93c5fd; border-color: #1e3a8a; }
+    .chip.m { background: #2e1065; color: #d8b4fe; border-color: #6b21a8; }
+    .spark { display: inline-flex; align-items: flex-end; height: 14px; gap: 1px; }
+    .spark i { width: 4px; border-radius: 1px; background: #44403c; display: block; }
+    .spark i.on { background: #10b981; }
+    .spark i.now { box-shadow: 0 2px 0 #38bdf8; }
+    .row-card { background: #0c0a09; border: 1px solid #292524; border-radius: 10px; padding: 8px; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; text-align: left; }
+    .row-card.hl { border-color: #34d399; box-shadow: 0 0 0 1px #34d39966; }
+    .row-card > div { text-align: left; flex: 1; }
+    .check-progress { padding: 8px 12px 6px; border-bottom: 1px solid #292524; }
+    .check-score { font-size: 18px; font-weight: 800; letter-spacing: -.02em; }
+    .check-mile { font-size: 12px; color: #34d399; margin: 2px 0 10px; font-weight: 600; }
+    .check-pills { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+    .check-pill { background: #292524; border: 1px solid #44403c; color: #e7e5e4; border-radius: 999px; padding: 3px 8px; font-size: 10px; cursor: pointer; }
+    .check-pill.on { border-color: #059669; color: #34d399; }
+    .ring-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 6px 0 4px; }
+    .ring-wrap { text-align: center; background: none; border: 1px solid transparent; color: inherit; padding: 2px; border-radius: 10px; cursor: pointer; width: 100%; }
+    .ring-wrap.on { border-color: #34d399; background: #064e3b33; }
+    .ring-wrap .muted { font-size: 9px; line-height: 1.2; }
+    .ring-label { font-size: 10px; font-weight: 700; margin-top: 2px; }
+    .ring-fill { transition: stroke-dashoffset .9s cubic-bezier(.22,1,.36,1); }
+    .trend-card { background: #0c0a09; border: 1px solid #292524; border-radius: 10px; padding: 8px; margin-top: 6px; }
+    .trend-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; }
+    .trend-num { font-size: 16px; font-weight: 800; color: #34d399; }
+    .check-thumb { width: 44px; height: 44px; border-radius: 8px; object-fit: contain; background: #0c0a09; flex: none; border: 1px solid #44403c; }
+    .like { display: inline-flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; margin-bottom: 4px; }
+    .like i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+    #hunt-panel { position: relative; }
+    #hunt-panel-list { position: absolute; right: 0; top: 100%; width: 260px; max-height: 300px; overflow: auto; background: #1c1917; border: 1px solid #44403c; border-radius: 10px; z-index: 40; display: none; margin-top: 4px; }
+    #hunt-panel-list.on { display: block; }
+    #hunt-panel-list .seg { justify-content: center; margin: 8px auto; width: calc(100% - 16px); }
+    #hunt-panel-body button { display: block; width: 100%; text-align: left; background: none; border: 0; border-bottom: 1px solid #292524; padding: 8px 10px; font-size: 11px; }
+    .ghost { background: #292524; border: 1px solid #44403c; color: #e7e5e4; border-radius: 8px; padding: 6px 10px; font-size: 11px; }
+    .tabs { display: flex; background: #0c0a09; padding: 4px; gap: 4px; }
+    .tabs button { flex: 1; background: none; border: 0; color: #a8a29e; padding: 8px; border-radius: 8px; font-size: 12px; font-weight: 600; }
+    .tabs button.on { background: #059669; color: #fff; }
+    .two { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .leaflet-popup-content-wrapper { border-radius: 14px; background: #1c1917; color: #f5f5f4; border: 1px solid #44403c; }
+    .leaflet-popup-tip { background: #1c1917; }
+    .popup-open { display: block; width: 100%; min-width: 160px; text-align: left; background: none; border: 0; color: inherit; cursor: pointer; padding: 0; }
+    .popup-open img { width: 100%; aspect-ratio: 1; object-fit: contain; border-radius: 8px; margin-bottom: 6px; background: #0c0a09; }
+    .crop-viewport { width: 100%; aspect-ratio: 1; position: relative; overflow: hidden; border-radius: 12px; touch-action: none; background: #0c0a09; cursor: grab; }
+    .crop-viewport:active { cursor: grabbing; }
+    #crop-image { position: absolute; left: 0; top: 0; max-width: none; user-select: none; pointer-events: none; }
+    .crop-grid { position: absolute; inset: 0; pointer-events: none; border: 1px solid rgba(255,255,255,.35); background-image: linear-gradient(to right, rgba(255,255,255,.18) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,.18) 1px, transparent 1px); background-size: 33.34% 33.34%; }
+    .hint { font-size: 11px; color: #a8a29e; }
+    .danger { background: #450a0a; border: 1px solid #7f1d1d; color: #fecaca; border-radius: 8px; padding: 6px 10px; font-size: 11px; }
+    .legend { display: flex; gap: 8px; flex-wrap: wrap; font-size: 10px; color: #a8a29e; margin-top: 8px; }
+    .legend i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; }
+    .hotspot-chit { background: #0c0a09; border: 2px solid #38bdf8; border-radius: 4px; }
+    .marker-cluster { background-clip: padding-box; }
+    .marker-cluster div { font: 11px ui-sans-serif, system-ui, sans-serif; color: #ecfdf5; }
+    .marker-cluster-small { background-color: #065f4688; }
+    .marker-cluster-small div { background-color: #059669; }
+    .marker-cluster-medium { background-color: #9a341688; }
+    .marker-cluster-medium div { background-color: #ea580c; }
+    .marker-cluster-large { background-color: #6b21a888; }
+    .marker-cluster-large div { background-color: #7c3aed; }
+    .rarity-cluster { background: transparent; }
+    .rarity-cluster div {
+      width: 32px; height: 32px; margin-left: 2px; margin-top: 2px;
+      border-radius: 50%; display: flex; align-items: center; justify-content: center;
+      color: #fff; font-weight: 700; font-size: 11px; border: 2px solid #fff;
+      box-shadow: 0 2px 6px rgba(0,0,0,.35);
+    }
+    #map-species-box { width: auto; }
+    #map-species-btn { font-size: 11px; padding: 6px 10px; white-space: nowrap; max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
+    #map-species-search {
+      background: #0c0a09; border: 1px solid #44403c; color: #f5f5f4;
+      font-size: 11px; padding: 6px 8px; border-radius: 6px; margin: 6px 8px 4px; width: calc(100% - 16px);
+    }
+    #map-species-results {
+      position: static; left: auto; right: auto; top: auto;
+      background: #1c1917; border: 1px solid #44403c; border-radius: 10px;
+      width: min(240px, calc(100vw - 24px));
+      max-height: min(320px, calc(100vh - 250px));
+      overflow: hidden;
+      display: none;
+      flex-direction: column;
+    }
+    #map-species-results.on { display: flex; }
+    #map-species-pin { flex: none; border-bottom: 1px solid #292524; }
+    #map-species-hits { overflow: auto; flex: 1; min-height: 0; }
+    #map-species-results button { background: #1c1917; color: #f5f5f4; font-size: 11px; }
+    #map-species-results button:hover { background: #292524; }
+    #map-species-results button.clear { background: #292524; color: #34d399; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <div class="logo" aria-hidden="true">
+        <svg viewBox="0 0 32 32" fill="none">
+          <ellipse cx="16" cy="16" rx="13" ry="8" stroke="#34d399" stroke-width="2"/>
+          <circle cx="16" cy="16" r="4.2" fill="#34d399"/>
+          <circle cx="17.2" cy="15" r="1.3" fill="#0c0a09"/>
+          <path d="M7 14.5c3-4 7-6 9-6" stroke="#10b981" stroke-width="1.4" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div>
+        <h1>BirdsEye</h1>
+        <div class="sub">Find what's flying.</div>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button class="ghost" type="button" onclick="openKeyModal()">Settings</button>
+      <input id="import-logs" type="file" accept="application/json" style="display:none" onchange="importLogs(event)" />
+      <button class="btn-em" onclick="openUploadModal()">+ Log</button>
+    </div>
+  </header>
+
+  <main>
+    <section id="view-map" class="view on">
+      <div class="overlay-top">
+        <div class="toolbar">
+          <div class="seg">
+            <button id="btn-map-photos" class="on" onclick="setMapMode('photos')">Photos</button>
+            <button id="btn-map-hunt" onclick="setMapMode('hunt')">Radar</button>
+          </div>
+          <div class="seg" id="photo-time-filters">
+            <button id="btn-time-30d" onclick="setTimeFilter('30d')">30D</button>
+            <button id="btn-time-1y" onclick="setTimeFilter('1y')">1Y</button>
+            <button id="btn-time-all" class="on" onclick="setTimeFilter('all')">All</button>
+          </div>
+          <div id="hunt-filters" style="display:none;flex-wrap:wrap;gap:4px;align-items:center">
+            <div class="seg">
+              <button id="btn-hunt-3d" class="on" onclick="setHuntBack(3)">3D</button>
+              <button id="btn-hunt-7d" onclick="setHuntBack(7)">7D</button>
+              <button id="btn-hunt-30d" onclick="setHuntBack(30)">30D</button>
+            </div>
+            <div class="seg">
+              <button type="button" onclick="nudgeRadius(-3)">−</button>
+              <button id="btn-radius-lock" onclick="toggleRadiusLock()">Radius</button>
+              <button type="button" onclick="nudgeRadius(3)">+</button>
+            </div>
+            <div class="seg">
+              <button id="btn-hide-logged" onclick="toggleHideLogged()">Unlogged Only</button>
+            </div>
+            <div class="seg">
+              <button id="btn-rar-all" class="on" onclick="setHuntRarity('all')">All</button>
+              <button id="btn-rar-common" onclick="setHuntRarity('common')">Com</button>
+              <button id="btn-rar-uncommon" onclick="setHuntRarity('uncommon')">Unc</button>
+              <button id="btn-rar-rare" onclick="setHuntRarity('rare')">Rare</button>
+              <button id="btn-rar-pulse" onclick="setHuntRarity('pulse')">Pulse</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="overlay-right">
+          <div class="rel" id="map-species-box">
+            <button type="button" class="ghost" id="map-species-btn">All Species ▾</button>
+          </div>
+          <div id="hunt-panel" style="display:none">
+            <button type="button" class="ghost" id="hunt-status" onclick="toggleHuntPanel()" style="max-width:200px;text-align:right"></button>
+            <div id="hunt-panel-list">
+              <div class="seg">
+                <button id="btn-panel-hotspots" onclick="setHuntPanelTab('hotspots')">Hotspots</button>
+                <button id="btn-panel-reports" class="on" onclick="setHuntPanelTab('reports')">Reports</button>
+              </div>
+              <div id="hunt-panel-body"></div>
+            </div>
+          </div>
+          <div id="map-species-results" class="results">
+            <input id="map-species-search" placeholder="Type a bird name…" autocomplete="off" />
+            <div id="map-species-pin">
+              <button type="button" class="clear" onclick="setMapSpeciesFilter('all')"><b>All Species</b></button>
+            </div>
+            <div id="map-species-hits"></div>
+          </div>
+      </div>
+      <div class="center-dot"></div>
+      <div id="map"></div>
+      <div class="hud">
+        <div class="hud-top">
+          <div class="hud-label">Discovery Goal</div>
+          <div class="seg">
+            <button id="btn-level-state" class="on" onclick="setRegionLevel('state')">State</button>
+            <button id="btn-level-country" onclick="setRegionLevel('country')">Country</button>
+          </div>
+        </div>
+        <div class="row">
+          <button id="region-label" onclick="openRegionSpeciesModal()">North Carolina</button>
+          <span id="region-stats">0 / 0 (0.0%)</span>
+        </div>
+        <div class="bar"><div id="region-bar"></div></div>
+      </div>
+    </section>
+
+    <section id="view-lifelist" class="view">
+      <div class="scroll">
+        <div class="list-head">
+          <div>
+            <h2 style="margin:0;font-size:16px">Master Life List</h2>
+            <p class="hint" id="lifelist-subtitle">Tap any lifer for details</p>
+          </div>
+          <select id="lifelist-sort" class="mini" onchange="renderLifeList()">
+            <option value="firstSeen">Lifer Date</option>
+            <option value="recent">Most Recent</option>
+            <option value="count">Most Logged</option>
+            <option value="alpha">Species (A-Z)</option>
+          </select>
+        </div>
+        <div id="lifelist-grid" class="grid"></div>
+      </div>
+    </section>
+
+    <section id="view-gallery" class="view">
+      <div class="scroll">
+        <div class="list-head">
+          <div>
+            <h2 style="margin:0;font-size:16px">Photo Gallery</h2>
+            <p class="hint" id="gallery-subtitle">Tap photo for detail view</p>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+            <select id="gallery-species-filter" class="mini" onchange="renderGallery()"><option value="all">All Species</option></select>
+            <select id="gallery-sort" class="mini" onchange="renderGallery()">
+              <option value="newest">Newest</option>
+              <option value="oldest">Oldest</option>
+              <option value="location">Location</option>
+              <option value="az">Species A–Z</option>
+              <option value="za">Species Z–A</option>
+            </select>
+          </div>
+        </div>
+        <div id="gallery-grid" class="grid"></div>
+      </div>
+    </section>
+
+    <section id="view-radar" class="view">
+      <div class="scroll">
+        <div class="hud-label">Phenology Occurrence Radar</div>
+        <h2 style="margin:4px 0 0;font-size:16px">Unlogged Targets</h2>
+        <p class="hint" id="radar-explainer">Statewide list uses your saved seasonality file. “This map / Near me / County” uses live eBird recent reports in that area, then drops species already on your life list. Bars are still the statewide monthly shape when we have one.</p>
+        <div class="two" style="margin-top:10px">
+          <select id="radar-scope" class="mini" style="max-width:none" onchange="onRadarScopeChange()">
+            <option value="state">Statewide</option>
+            <option value="map">This map view</option>
+            <option value="near">Near me</option>
+            <option value="county">This county</option>
+          </select>
+          <select id="radar-sort" class="mini" style="max-width:none" onchange="renderRadar()">
+            <option value="prob">This month (high → low)</option>
+            <option value="probAsc">This month (low → high)</option>
+            <option value="year">Year-round total (high → low)</option>
+            <option value="yearAsc">Year-round total (low → high)</option>
+            <option value="az">Species A–Z</option>
+          </select>
+        </div>
+        <select id="radar-shown" class="mini" style="max-width:none;margin-top:8px" onchange="renderRadar()">
+          <option value="all">All unlogged</option>
+          <option value="month">Only recorded this month</option>
+          <option value="nearby">Only nearby reports</option>
+        </select>
+        <p class="hint" id="radar-count" style="margin:8px 0 0"></p>
+        <div id="radar-list" style="margin-top:12px"></div>
+      </div>
+    </section>
+  </main>
+
+  <nav>
+    <button class="nav-btn on" id="nav-btn-map" onclick="switchTab('map')">🗺<br>Map</button>
+    <button class="nav-btn" id="nav-btn-lifelist" onclick="switchTab('lifelist')">☰<br>Life List</button>
+    <button class="nav-btn" id="nav-btn-gallery" onclick="switchTab('gallery')">🖼<br>Gallery</button>
+    <button class="nav-btn" id="nav-btn-radar" onclick="switchTab('radar')">◎<br>Targets</button>
+  </nav>
+
+  <div id="region-species-modal" class="modal">
+    <div class="sheet">
+      <div class="sheet-h">
+        <div>
+          <div class="hud-label">Official eBird Checklist</div>
+          <strong id="modal-region-title">North Carolina</strong>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="seg" id="checklist-window-seg">
+            <button type="button" id="btn-check-30d" onclick="setChecklistWindow('30d')">30D</button>
+            <button type="button" id="btn-check-1y" onclick="setChecklistWindow('1y')">1Y</button>
+            <button type="button" id="btn-check-all" class="on" onclick="setChecklistWindow('all')">All-Time</button>
+          </div>
+          <button class="x" onclick="dismissChecklistModal(true)">✕</button>
+        </div>
+      </div>
+      <div class="check-progress">
+        <div class="check-kicker">Season & type</div>
+        <div class="check-pills" id="checklist-status-break"></div>
+        <div class="check-pills" id="checklist-group-break"></div>
+        <div class="check-score" id="checklist-score">—</div>
+        <div class="check-mile" id="checklist-mile">Loading checklist…</div>
+        <div id="checklist-rings" class="ring-row"></div>
+      </div>
+      <div class="tabs">
+        <button id="tab-btn-discovered" class="on" onclick="switchRegionModalTab('discovered')">Discovered (<span id="modal-discovered-count">0</span>)</button>
+        <button id="tab-btn-missing" onclick="switchRegionModalTab('missing')">Missing (<span id="modal-missing-count">0</span>)</button>
+      </div>
+      <div style="padding:8px 12px;display:flex;flex-direction:column;gap:6px">
+        <input type="text" id="checklist-search" placeholder="Search species…" oninput="scheduleChecklistRender()" />
+        <select id="checklist-sort" onchange="renderChecklistViews()">
+          <option value="az">Species A–Z</option>
+          <option value="za">Species Z–A</option>
+          <option value="first">First seen</option>
+          <option value="status">Status</option>
+        </select>
+      </div>
+      <div class="sheet-b">
+        <div id="modal-discovered-view"></div>
+        <div id="modal-missing-view" style="display:none"></div>
+      </div>
+      <div class="sheet-f">
+        <span id="modal-summary-pct" class="mono" style="color:#34d399">0% Completed</span>
+        <button class="ghost" onclick="dismissChecklistModal(false)">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="detail-modal" class="modal">
+    <div class="sheet">
+      <div class="sheet-h">
+        <div>
+          <strong id="detail-common-name">Species</strong>
+          <div class="muted" id="detail-scientific-name" style="font-style:italic"></div>
+        </div>
+        <button class="x" onclick="closeDetailModal()">✕</button>
+      </div>
+      <div class="sheet-b">
+        <img id="detail-img" alt="" style="width:100%;max-height:320px;object-fit:contain;background:#0c0a09;border-radius:12px" />
+        <div class="two" style="margin-top:12px">
+          <div><div class="muted">Date Seen</div><div id="detail-date"></div></div>
+          <div><div class="muted">Location</div><div id="detail-location"></div></div>
+          <div><div class="muted">State</div><div id="detail-state"></div></div>
+          <div><div class="muted">Coordinates</div><button type="button" id="detail-coords" class="coord-link" onclick="flyToCurrentSighting()"></button></div>
+        </div>
+        <p id="detail-notes" class="hint" style="font-style:italic;margin-top:12px"></p>
+        <div class="muted" style="margin:12px 0 6px">Sightings (<span id="detail-sibling-count">0</span>)</div>
+        <div id="detail-siblings" style="display:flex;gap:8px;overflow:auto"></div>
+      </div>
+      <div class="sheet-f detail-actions">
+        <button class="ghost" id="btn-toggle-cover-detail" type="button">Cover</button>
+        <button class="ghost" type="button" onclick="editCurrentSighting()">Edit</button>
+        <button class="danger" type="button" onclick="deleteSighting(currentDetailId)">Delete</button>
+        <button class="btn-em" onclick="closeDetailModal()">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="upload-modal" class="modal">
+    <div class="sheet">
+      <div class="sheet-h">
+        <strong id="upload-title">Log Sighting</strong>
+        <button class="x" onclick="closeUploadModal()">✕</button>
+      </div>
+      <div class="sheet-b">
+        <div class="field rel">
+          <label>Species</label>
+          <input type="hidden" id="form-species" />
+          <input type="text" id="form-species-search" placeholder="Type a species name…" autocomplete="off" oninput="onSpeciesSearchInput()" />
+          <div id="form-species-results" class="results"></div>
+        </div>
+        <div class="field">
+          <label>Bird Photo</label>
+          <input type="file" id="form-file" accept="image/*" onchange="handleImageSelection(event)" />
+          <div id="cropper-container" style="display:none;margin-top:8px">
+            <div class="crop-viewport" id="crop-viewport">
+              <img id="crop-image" alt="" />
+              <div class="crop-grid"></div>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
+              <span class="muted">Zoom</span>
+              <input type="range" id="crop-zoom" min="0.2" max="4" step="0.02" value="1" oninput="onCropZoom()" style="flex:1" />
+              <button type="button" class="ghost" onclick="fitCropCover()">Reset</button>
+            </div>
+            <p class="hint" id="crop-hint">Drag to frame the bird. What you see in the square is what gets saved.</p>
+          </div>
+        </div>
+        <div class="field">
+          <label>Location</label>
+          <div class="two">
+            <button type="button" class="ghost" id="btn-use-gps" onclick="fetchGPSLocation()">Use My GPS</button>
+            <button type="button" class="ghost" id="btn-pick-map" onclick="togglePickerMap()">Pick on Map</button>
+          </div>
+          <div id="picker-map-drawer" style="display:none;height:180px;margin-top:8px;border-radius:12px;overflow:hidden;border:1px solid #44403c">
+            <div id="picker-map" style="height:100%"></div>
+          </div>
+          <div class="two" style="margin-top:8px">
+            <div><div class="muted">Location Name</div><input type="text" id="form-location" placeholder="e.g. Muddy Creek" /></div>
+            <div><div class="muted">State</div><input type="text" id="form-state" value="North Carolina" /></div>
+          </div>
+        </div>
+        <div class="field"><label>Date</label><input type="date" id="form-date" /></div>
+        <div class="field"><label>Field Notes</label><textarea id="form-notes" rows="2"></textarea></div>
+        <button type="button" class="ghost" id="btn-form-cover" onclick="toggleFormCover()">Set as cover photo</button>
+        <input type="checkbox" id="form-is-cover" style="display:none" />
+      </div>
+      <div class="sheet-f" style="gap:8px">
+        <button class="danger" id="btn-delete-sighting" type="button" style="display:none" onclick="deleteSighting(editingId)">Delete</button>
+        <button class="btn-em" style="flex:1" onclick="saveSightingRecord()">Save Sighting</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="key-modal" class="modal">
+    <div class="sheet">
+      <div class="sheet-h"><strong>Settings</strong><button class="x" onclick="closeKeyModal()">✕</button></div>
+      <div class="sheet-b">
+        <p class="hint">Radar and nearby targets call eBird from this browser. The key stays on this device.</p>
+        <div class="field">
+          <label>eBird API key</label>
+          <input type="text" id="form-ebird-key" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" autocomplete="off" />
+        </div>
+        <p class="hint">Get a key at ebird.org/api/keygen</p>
+        <div class="two" style="margin-top:16px">
+          <button class="ghost" type="button" onclick="exportLogs()">Export logs</button>
+          <button class="ghost" type="button" onclick="document.getElementById('import-logs').click()">Import logs</button>
+        </div>
+      </div>
+      <div class="sheet-f">
+        <button class="btn-em" style="width:100%" onclick="saveEbirdKey()">Save key</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+  <script>
+    const STATE_CODES = {
+      'Alabama':'US-AL','Alaska':'US-AK','Arizona':'US-AZ','Arkansas':'US-AR','California':'US-CA',
+      'Colorado':'US-CO','Connecticut':'US-CT','Delaware':'US-DE','District of Columbia':'US-DC','Florida':'US-FL',
+      'Georgia':'US-GA','Hawaii':'US-HI','Idaho':'US-ID','Illinois':'US-IL','Indiana':'US-IN',
+      'Iowa':'US-IA','Kansas':'US-KS','Kentucky':'US-KY','Louisiana':'US-LA','Maine':'US-ME',
+      'Maryland':'US-MD','Massachusetts':'US-MA','Michigan':'US-MI','Minnesota':'US-MN','Mississippi':'US-MS',
+      'Missouri':'US-MO','Montana':'US-MT','Nebraska':'US-NE','Nevada':'US-NV','New Hampshire':'US-NH',
+      'New Jersey':'US-NJ','New Mexico':'US-NM','New York':'US-NY','North Carolina':'US-NC','North Dakota':'US-ND',
+      'Ohio':'US-OH','Oklahoma':'US-OK','Oregon':'US-OR','Pennsylvania':'US-PA','Rhode Island':'US-RI',
+      'South Carolina':'US-SC','South Dakota':'US-SD','Tennessee':'US-TN','Texas':'US-TX','Utah':'US-UT',
+      'Vermont':'US-VT','Virginia':'US-VA','Washington':'US-WA','West Virginia':'US-WV','Wisconsin':'US-WI','Wyoming':'US-WY'
+    };
+    const ALPH = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    const CURRENT_MONTH = new Date().getMonth();
+    const MONTH_LABELS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const DATA = { L: [], T: {}, S: {} };
+    const sightings = [];
+    let editingId = null;
+    let currentDetailId = null;
+
+    const SEED = [
+      ['s1','tuftit','2026-09-08',36.0999,-80.2442,'Reynolda Gardens','North Carolina','United States','Active in high canopy.','https://images.unsplash.com/photo-1548802673-380ab8ebc7b7?auto=format&fit=crop&w=400&q=70',1],
+      ['s2','tuftit','2026-08-20',36.1200,-80.2600,'Backyard Feeder','North Carolina','United States','Sunflower seeds.','https://images.unsplash.com/photo-1555169062-013468b47731?auto=format&fit=crop&w=400&q=70',0],
+      ['s3','easblu','2026-07-28',36.1325,-80.2911,'Muddy Creek Greenway','North Carolina','United States','Fence post perch.','https://images.unsplash.com/photo-1588167056547-d0c30953a5c3?auto=format&fit=crop&w=400&q=70',1],
+      ['s4','norcar','2026-03-10',36.0999,-80.2442,'Reynolda Gardens','North Carolina','United States','Vibrant singing male.','https://images.unsplash.com/photo-1579273166657-97598808df31?auto=format&fit=crop&w=400&q=70',1],
+      ['s5','grnher','2026-06-21',36.0681,-80.2312,'Salem Lake','North Carolina','United States','Stalking shore minnows.','https://images.unsplash.com/photo-1612178537253-bccd437b730e?auto=format&fit=crop&w=400&q=70',1],
+      ['s6','ameavo','2025-07-04',38.9072,-77.0369,'Constitution Gardens','District of Columbia','United States','Foraging shoreline.','https://images.unsplash.com/photo-1574063413132-355dbfd83e21?auto=format&fit=crop&w=400&q=70',1]
+    ];
+
+    let currentRegionLevel = 'state';
+    let activeState = 'North Carolina';
+    let currentTimeFilter = 'all';
+    let currentSpeciesFilter = 'all';
+    let hideLogged = false;
+    let huntRarity = 'all';
+    let huntBack = 3;
+    let radiusLocked = false;
+    let radiusLock = { lat: 36.0999, lng: -80.2442, dist: 20 };
+    let radiusCircle = null;
+    let mapMode = 'photos';
+    let radarScope = 'state';
+    let activeCounty = '';
+    let activeCountyCode = '';
+    let huntCache = { obs: [], hotspots: [], label: '' };
+    let countyCache = {};
+    let huntTimer = 0;
+    let huntPanelTab = 'reports';
+    let skipHuntMove = false;
+    let focusMarker = null;
+    let mapInstance = null;
+    let markersLayer = null;
+    let huntLayer = null;
+    let pickerMap = null;
+    let pickerMarker = null;
+    let selectedCoords = { lat: 36.0999, lng: -80.2442 };
+    let originalImageObj = new Image();
+    originalImageObj.crossOrigin = 'anonymous';
+    let crop = { hasImage: false, dirty: false, z: 1, ox: 0, oy: 0, base: 1, vw: 0, dragging: false, startX: 0, startY: 0, startOx: 0, startOy: 0 };
+    let modalTab = 'discovered';
+    let checklistWindow = 'all';
+    let checklistRarity = 'all';
+    let checklistStatus = 'all';
+    let checklistGroup = 'all';
+    let checklistResume = false;
+    let checklistScroll = 0;
+    let radarFocusCode = '';
+    let stateCache = new Map();
+    let moveTimer = 0;
+    let markerTimer = 0;
+    let searchTimer = 0;
+
+    function taxName(code) {
+      const raw = DATA.T[code];
+      if (!raw) return { comName: code, sciName: '' };
+      const i = raw.indexOf('|');
+      return i < 0 ? { comName: raw, sciName: '' } : { comName: raw.slice(0, i), sciName: raw.slice(i + 1) };
+    }
+
+    function isRealSpecies(code) {
+      if (!code || /^[xy]\d/i.test(code)) return false;
+      const raw = DATA.T && DATA.T[code];
+      if (!raw) return true;
+      const n = taxName(code).comName || '';
+      if (!n || n === code) return false;
+      const low = n.toLowerCase();
+      if (low.includes('hybrid') || low.includes('domestic') || n.includes('/') || /\bsp\.?\b/.test(low)) return false;
+      return true;
+    }
+
+    function fmtShortDate(d) {
+      if (!d) return '';
+      const p = String(d).split('-');
+      if (p.length < 3) return d;
+      return p[1] + '-' + p[2] + '-' + p[0];
+    }
+
+    function monthProb(sp) {
+      return (sp.monthly && sp.monthly[CURRENT_MONTH]) || 0;
+    }
+    function seasonScore(sp) {
+      return Math.max(1, Math.min(10, Math.round(monthProb(sp) * 10)));
+    }
+    function yearPeak(sp) {
+      const m = sp.monthly || [];
+      let mx = 0;
+      for (let i = 0; i < m.length; i++) if (m[i] > mx) mx = m[i];
+      return mx;
+    }
+    function yearTotal(sp) {
+      const m = sp.monthly || [];
+      let s = 0;
+      for (let i = 0; i < m.length; i++) s += m[i] || 0;
+      return s;
+    }
+    function yearScore(sp) {
+      return Math.max(1, Math.min(10, Math.round(yearTotal(sp) * 10)));
+    }
+    function foldName(s) {
+      return String(s || '').toLowerCase().replace(/[-–—_/]/g, ' ').replace(/\s+/g, ' ').trim();
+    }
+    function nameMatches(hay, q) {
+      if (!q) return true;
+      return foldName(hay).includes(foldName(q));
+    }
+    function seasonBucket(sp) {
+      const v = monthProb(sp);
+      if (v >= 0.45) return { label: 'Likely', color: '#10b981' };
+      if (v >= 0.15) return { label: 'Possible', color: '#f97316' };
+      return { label: 'Off-season', color: '#78716c' };
+    }
+
+    function coverMarkHTML() {
+      return '<span class="cover-mark" title="Cover photo"><svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path fill="#f5d36c" d="M12 2.6l2.47 6.08 6.53.55-4.96 4.22 1.53 6.37L12 16.7 6.43 19.82l1.53-6.37L3 9.23l6.53-.55z"/></svg></span>';
+    }
+
+    function ensureSoloCovers() {
+      const groups = new Map();
+      for (let i = 0; i < sightings.length; i++) {
+        const s = sightings[i];
+        if (!groups.has(s.species_code)) groups.set(s.species_code, []);
+        groups.get(s.species_code).push(s);
+      }
+      groups.forEach(rows => {
+        if (rows.length === 1) rows[0].is_cover = 1;
+      });
+    }
+
+    function persistSightings() {
+      ensureSoloCovers();
+      const json = JSON.stringify(sightings);
+      try { localStorage.setItem('avian_sightings', json); } catch (e) {
+        try {
+          const slim = sightings.map(s => Object.assign({}, s, { photo_full: s.photo_url || s.photo_full || '' }));
+          localStorage.setItem('avian_sightings', JSON.stringify(slim));
+        } catch (e2) {}
+      }
+      if (window.indexedDB) {
+        try {
+          const req = indexedDB.open('birdseye', 1);
+          req.onupgradeneeded = function () {
+            if (!req.result.objectStoreNames.contains('logs')) req.result.createObjectStore('logs');
+          };
+          req.onsuccess = function () {
+            const tx = req.result.transaction('logs', 'readwrite');
+            tx.objectStore('logs').put(sightings, 'all');
+          };
+        } catch (e) {}
+      }
+    }
+
+    function loadSightingsFromIDB() {
+      return new Promise(resolve => {
+        if (!window.indexedDB) { resolve(null); return; }
+        try {
+          const req = indexedDB.open('birdseye', 1);
+          req.onupgradeneeded = function () {
+            if (!req.result.objectStoreNames.contains('logs')) req.result.createObjectStore('logs');
+          };
+          req.onerror = function () { resolve(null); };
+          req.onsuccess = function () {
+            try {
+              const tx = req.result.transaction('logs', 'readonly');
+              const get = tx.objectStore('logs').get('all');
+              get.onsuccess = function () { resolve(get.result || null); };
+              get.onerror = function () { resolve(null); };
+            } catch (e) { resolve(null); }
+          };
+        } catch (e) { resolve(null); }
+      });
+    }
+
+    function exportLogs() {
+      const blob = new Blob([JSON.stringify({ version: 1, saved: new Date().toISOString(), sightings }, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'birdseye-logs.json';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
+
+    function importLogs(ev) {
+      const file = ev.target.files && ev.target.files[0];
+      ev.target.value = '';
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function () {
+        try {
+          const data = JSON.parse(reader.result);
+          const rows = Array.isArray(data) ? data : data.sightings;
+          if (!Array.isArray(rows) || !rows.length) { alert('No sightings found in that file.'); return; }
+          if (!confirm('Replace current logs with ' + rows.length + ' imported sightings?')) return;
+          sightings.length = 0;
+          rows.forEach(s => sightings.push(s));
+          persistSightings();
+          refreshUI();
+          renderLifeList();
+          renderGallery();
+          renderRadar();
+        } catch (e) {
+          alert('Could not read that file.');
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    function unpackMonth(pack) {
+      if (!pack) return null;
+      const out = [];
+      for (let i = 0; i < pack.length; i++) {
+        const idx = ALPH.indexOf(pack[i]);
+        out.push(idx < 0 ? 0 : idx / 35);
+      }
+      return out;
+    }
+
+    function decodeState(code) {
+      if (stateCache.has(code)) return stateCache.get(code);
+      const raw = DATA.S[code];
+      if (!raw) {
+        return { count: 0, list: [] };
+      }
+      const list = [];
+      const items = raw.p || [];
+      for (let i = 0; i < items.length; i++) {
+        const parts = items[i].split(':');
+        list.push({
+          code: parts[0],
+          status: DATA.L[Number(parts[1])] || 'Seasonal',
+          monthly: unpackMonth(parts[2] || '')
+        });
+      }
+      const decoded = { count: raw.c || list.length, list };
+      stateCache.set(code, decoded);
+      return decoded;
+    }
+
+    function seedSightings() {
+      sightings.length = 0;
+      try {
+        const saved = JSON.parse(localStorage.getItem('avian_sightings') || 'null');
+        if (Array.isArray(saved) && saved.length) {
+          saved.forEach(s => sightings.push(s));
+          ensureFullPhotos();
+          return;
+        }
+      } catch (e) {}
+      SEED.forEach(r => sightings.push({
+        id: r[0], species_code: r[1], date: r[2], lat: r[3], lng: r[4],
+        location_name: r[5], state: r[6], country: r[7], notes: r[8], photo_url: r[9], photo_full: r[9], is_cover: r[10]
+      }));
+    }
+
+    function ensureFullPhotos() {
+      sightings.forEach(s => { if (s.photo_url && !s.photo_full) s.photo_full = s.photo_url; });
+    }
+
+    function initMap() {
+      mapInstance = L.map('map', { zoomControl: false, preferCanvas: false, fadeAnimation: false, markerZoomAnimation: false })
+        .setView([36.0999, -80.2442], 11);
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '&copy; OSM' }).addTo(mapInstance);
+      const clusterOpts = { showCoverageOnHover: false, maxClusterRadius: 32, spiderfyOnMaxZoom: true, disableClusteringAtZoom: 18, iconCreateFunction: rarityClusterIcon };
+      markersLayer = L.markerClusterGroup(clusterOpts).addTo(mapInstance);
+      huntLayer = L.markerClusterGroup(clusterOpts).addTo(mapInstance);
+      mapInstance.on('zoomend', scheduleMarkers);
+      mapInstance.on('moveend', () => {
+        clearTimeout(moveTimer);
+        moveTimer = setTimeout(() => {
+          if (skipHuntMove) { skipHuntMove = Math.max(0, skipHuntMove - 1); return; }
+          resolveStateLocation();
+          if (mapMode === 'hunt' && !radiusLocked && currentSpeciesFilter === 'all') scheduleHunt();
+        }, 700);
+      });
+      renderMapMarkers();
+    }
+
+    function getEbirdKey() {
+      return localStorage.getItem('avian_ebird_key') || '';
+    }
+    function openKeyModal() {
+      document.getElementById('form-ebird-key').value = getEbirdKey();
+      document.getElementById('key-modal').classList.add('on');
+    }
+    function closeKeyModal() { document.getElementById('key-modal').classList.remove('on'); }
+    function saveEbirdKey() {
+      const key = (document.getElementById('form-ebird-key').value || '').trim();
+      if (key) localStorage.setItem('avian_ebird_key', key);
+      else localStorage.removeItem('avian_ebird_key');
+      closeKeyModal();
+      if (mapMode === 'hunt') scheduleHunt();
+      if (radarScope !== 'state') renderRadar();
+    }
+    function requireEbirdKey() {
+      if (getEbirdKey()) return true;
+      setHuntStatus('Add an eBird key to use Radar / local targets');
+      openKeyModal();
+      return false;
+    }
+
+    async function ebirdGet(path, params) {
+      const key = getEbirdKey();
+      if (!key) throw new Error('no key');
+      const qs = params ? ('?' + new URLSearchParams(params).toString()) : '';
+      const res = await fetch('https://api.ebird.org/v2' + path + qs, {
+        headers: { 'X-eBirdApiToken': key }
+      });
+      if (!res.ok) throw new Error('eBird ' + res.status);
+      return res.json();
+    }
+
+    function lifeCodes() {
+      const set = new Set();
+      for (let i = 0; i < sightings.length; i++) set.add(sightings[i].species_code);
+      return set;
+    }
+
+    function speciesFromState(code) {
+      const entry = decodeState(STATE_CODES[activeState] || 'US-NC');
+      return entry.list.find(sp => sp.code === code) || { code: code, status: 'Seasonal', monthly: [] };
+    }
+
+    function yearAvg(sp) {
+      const m = sp.monthly || [];
+      if (!m.length) return 0;
+      let s = 0;
+      for (let i = 0; i < m.length; i++) s += m[i] || 0;
+      return s / m.length;
+    }
+
+    function rarityRank(code) {
+      const sp = speciesFromState(code);
+      const now = monthProb(sp);
+      const peak = yearPeak(sp);
+      const avg = yearAvg(sp);
+      if (now >= 0.35 && avg <= 0.22) return 4;
+      if (peak < 0.22 || avg < 0.12) return 3;
+      if (avg >= 0.4) return 1;
+      if (avg >= 0.18) return 2;
+      return 3;
+    }
+
+    function huntColor(code) {
+      const r = rarityRank(code);
+      if (r === 4) return '#c084fc';
+      if (r === 3) return '#7c3aed';
+      if (r === 1) return '#10b981';
+      return '#f97316';
+    }
+
+    function rarityClusterIcon(cluster) {
+      let max = 0;
+      let color = '#10b981';
+      cluster.getAllChildMarkers().forEach(m => {
+        const r = m.options.rarity || 1;
+        if (r > max) {
+          max = r;
+          color = m.options.rarityColor || huntColor(m.options.speciesCode) || color;
+        }
+      });
+      return L.divIcon({
+        html: '<div style="background:' + color + '">' + cluster.getChildCount() + '</div>',
+        className: 'marker-cluster rarity-cluster',
+        iconSize: L.point(36, 36)
+      });
+    }
+
+    function toggleHideLogged() {
+      hideLogged = !hideLogged;
+      const btn = document.getElementById('btn-hide-logged');
+      if (btn) btn.className = hideLogged ? 'on' : '';
+      if (mapMode === 'hunt') renderHuntMap();
+    }
+
+    function setHuntRarity(level) {
+      huntRarity = level;
+      ['all','common','uncommon','rare','pulse'].forEach(k => {
+        const el = document.getElementById('btn-rar-' + k);
+        if (el) el.className = k === level ? 'on' : '';
+      });
+      if (mapMode === 'hunt') renderHuntMap();
+    }
+
+    function passesHuntFilters(code) {
+      if (currentSpeciesFilter !== 'all' && code !== currentSpeciesFilter) return false;
+      if (hideLogged && lifeCodes().has(code)) return false;
+      if (huntRarity !== 'all') {
+        const r = rarityRank(code);
+        if (huntRarity === 'common' && r !== 1) return false;
+        if (huntRarity === 'uncommon' && r !== 2) return false;
+        if (huntRarity === 'rare' && r !== 3) return false;
+        if (huntRarity === 'pulse' && r !== 4) return false;
+      }
+      return true;
+    }
+
+    function mapRadiusKm() {
+      if (!mapInstance) return 12;
+      const c = mapInstance.getCenter();
+      const ne = mapInstance.getBounds().getNorthEast();
+      const R = 6371;
+      const dLat = (ne.lat - c.lat) * Math.PI / 180;
+      const dLng = (ne.lng - c.lng) * Math.PI / 180;
+      const a = Math.sin(dLat/2)**2 + Math.cos(c.lat*Math.PI/180)*Math.cos(ne.lat*Math.PI/180)*Math.sin(dLng/2)**2;
+      const km = 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
+      return Math.max(3, Math.min(50, Math.round(km * 0.6)));
+    }
+
+    function setMapMode(mode) {
+      mapMode = mode;
+      document.getElementById('btn-map-photos').className = mode === 'photos' ? 'on' : '';
+      document.getElementById('btn-map-hunt').className = mode === 'hunt' ? 'on' : '';
+      document.getElementById('photo-time-filters').style.display = mode === 'photos' ? 'flex' : 'none';
+      document.getElementById('hunt-filters').style.display = mode === 'hunt' ? 'flex' : 'none';
+      document.getElementById('hunt-panel').style.display = mode === 'hunt' ? 'block' : 'none';
+      document.getElementById('map-species-box').style.display = 'block';
+      if (mode === 'hunt') {
+        if (!requireEbirdKey()) { setMapMode('photos'); return; }
+        if (!radiusLocked) scheduleHunt();
+        else renderHuntMap();
+      } else {
+        setHuntStatus('');
+        document.getElementById('hunt-panel-list').classList.remove('on');
+        if (radiusCircle && mapInstance) mapInstance.removeLayer(radiusCircle);
+        renderMapMarkers();
+      }
+    }
+
+    function setHuntBack(days) {
+      huntBack = days;
+      [3, 7, 30].forEach(d => {
+        const el = document.getElementById('btn-hunt-' + d + 'd');
+        if (el) el.className = d === days ? 'on' : '';
+      });
+      if (mapMode === 'hunt') loadHuntData();
+    }
+
+    function toggleRadiusLock() {
+      radiusLocked = !radiusLocked;
+      const btn = document.getElementById('btn-radius-lock');
+      if (radiusLocked && mapInstance) {
+        const c = mapInstance.getCenter();
+        radiusLock = { lat: c.lat, lng: c.lng, dist: mapRadiusKm() };
+        updateRadiusButton();
+        drawRadiusCircle();
+        loadHuntData();
+      } else {
+        btn.textContent = 'Radius off';
+        btn.className = '';
+        if (radiusCircle && mapInstance) { mapInstance.removeLayer(radiusCircle); radiusCircle = null; }
+        if (mapMode === 'hunt') scheduleHunt();
+      }
+    }
+
+    function updateRadiusButton() {
+      const btn = document.getElementById('btn-radius-lock');
+      if (!btn) return;
+      if (radiusLocked) {
+        btn.textContent = 'Radius ' + radiusLock.dist + ' km';
+        btn.className = 'on';
+      } else {
+        btn.textContent = 'Radius off';
+        btn.className = '';
+      }
+    }
+
+    function nudgeRadius(delta) {
+      if (!mapInstance) return;
+      if (!radiusLocked) {
+        const c = mapInstance.getCenter();
+        radiusLock = { lat: c.lat, lng: c.lng, dist: mapRadiusKm() };
+        radiusLocked = true;
+      }
+      radiusLock.dist = Math.max(3, Math.min(50, radiusLock.dist + delta));
+      updateRadiusButton();
+      drawRadiusCircle();
+      loadHuntData();
+    }
+
+    function setHuntStatus(text) {
+      const el = document.getElementById('hunt-status');
+      if (el) el.textContent = text || '';
+    }
+
+    function toggleHuntPanel() {
+      const box = document.getElementById('hunt-panel-list');
+      box.classList.toggle('on');
+      if (box.classList.contains('on')) renderHuntPanel();
+    }
+
+    function setHuntPanelTab(tab) {
+      huntPanelTab = tab;
+      document.getElementById('btn-panel-hotspots').className = tab === 'hotspots' ? 'on' : '';
+      document.getElementById('btn-panel-reports').className = tab === 'reports' ? 'on' : '';
+      renderHuntPanel();
+      if (mapMode === 'hunt') renderHuntMap();
+    }
+
+    function flyHuntTarget(lat, lng, kind) {
+      if (!mapInstance || lat == null || lng == null) return;
+      skipHuntMove = 2;
+      const panel = document.getElementById('hunt-panel-list');
+      if (panel) panel.classList.remove('on');
+      if (kind && kind !== huntPanelTab) {
+        huntPanelTab = kind;
+        document.getElementById('btn-panel-hotspots').className = kind === 'hotspots' ? 'on' : '';
+        document.getElementById('btn-panel-reports').className = kind === 'reports' ? 'on' : '';
+      }
+      if (mapMode === 'hunt') renderHuntMap();
+      mapInstance.setView([lat, lng], 16, { animate: false });
+      mapInstance.panBy([0, 70], { animate: false });
+      const target = L.latLng(lat, lng);
+      let best = null;
+      let bestD = Infinity;
+      const kids = huntLayer.getLayers ? huntLayer.getLayers() : [];
+      const walk = (layer) => {
+        if (layer.getAllChildMarkers) {
+          layer.getAllChildMarkers().forEach(walk);
+          return;
+        }
+        if (!layer.getLatLng) return;
+        const d = mapInstance.distance(layer.getLatLng(), target);
+        if (d < bestD) { bestD = d; best = layer; }
+      };
+      kids.forEach(walk);
+      if (best && bestD < 800 && huntLayer.zoomToShowLayer) {
+        huntLayer.zoomToShowLayer(best, () => best.openPopup());
+      } else if (best && best.openPopup) best.openPopup();
+    }
+
+    function renderHuntPanel() {
+      const body = document.getElementById('hunt-panel-body');
+      if (!body) return;
+      if (huntPanelTab === 'hotspots') {
+        const rows = (huntCache.hotspots || []).slice().sort((a,b) => (b.numSpeciesAllTime || 0) - (a.numSpeciesAllTime || 0));
+        body.innerHTML = rows.map(h =>
+          '<button type="button" onclick="flyHuntTarget(' + h.lat + ',' + h.lng + ',\'hotspots\')">' +
+          '<b>' + (h.locName || 'Hotspot') + '</b><div class="muted">' + (h.numSpeciesAllTime ? h.numSpeciesAllTime + ' species all-time' : (currentSpeciesFilter === 'all' ? '' : taxName(currentSpeciesFilter).comName)) + '</div></button>'
+        ).join('') || '<div class="hint" style="padding:8px">No hotspots in this radius.</div>';
+      } else {
+        const have = lifeCodes();
+        const rows = [];
+        const seen = new Set();
+        (huntCache.obs || []).forEach(o => {
+          if (!o.speciesCode) return;
+          if (!passesHuntFilters(o.speciesCode)) return;
+          if (currentSpeciesFilter === 'all') {
+            if (seen.has(o.speciesCode)) return;
+            seen.add(o.speciesCode);
+          }
+          rows.push(o);
+        });
+        body.innerHTML = rows.map(o => {
+          return '<button type="button" onclick="flyHuntTarget(' + o.lat + ',' + o.lng + ',\'reports\')">' +
+            '<b>' + (o.comName || taxName(o.speciesCode).comName) + '</b>' +
+            '<div class="muted">' + (o.locName || '') + (o.obsDt ? ' · ' + o.obsDt : '') + (have.has(o.speciesCode) ? ' · logged' : '') + '</div></button>';
+        }).join('') || '<div class="hint" style="padding:8px">No recent reports in this radius.</div>';
+      }
+    }
+
+    function drawRadiusCircle() {
+      if (!mapInstance) return;
+      if (radiusCircle) mapInstance.removeLayer(radiusCircle);
+      radiusCircle = L.circle([radiusLock.lat, radiusLock.lng], {
+        radius: radiusLock.dist * 1000,
+        color: '#38bdf8', weight: 1, fillColor: '#38bdf8', fillOpacity: 0.06
+      }).addTo(mapInstance);
+    }
+
+    function scheduleHunt() {
+      clearTimeout(huntTimer);
+      huntTimer = setTimeout(loadHuntData, 250);
+    }
+
+    async function loadHuntData(origin) {
+      const scope = origin === 'radar' ? radarScope : (origin || (mapMode === 'hunt' ? 'map' : radarScope));
+      if (scope === 'state' && currentSpeciesFilter === 'all') return;
+      if (!getEbirdKey()) return;
+      try {
+        if (currentSpeciesFilter !== 'all' && (mapMode === 'hunt' || origin === 'radar')) {
+          const region = STATE_CODES[activeState] || 'US-NC';
+          const name = taxName(currentSpeciesFilter).comName;
+          setHuntStatus('Loading ' + name + ' statewide…');
+          const obs = await ebirdGet('/data/obs/' + region + '/recent/' + currentSpeciesFilter, {
+            back: String(huntBack), maxResults: '100'
+          });
+          const spots = [];
+          const seenLoc = new Set();
+          (obs || []).forEach(o => {
+            const id = o.locId || ((o.lat || '') + ',' + (o.lng || ''));
+            if (seenLoc.has(id) || o.lat == null) return;
+            seenLoc.add(id);
+            spots.push({ locId: o.locId, locName: o.locName, lat: o.lat, lng: o.lng, numSpeciesAllTime: '' });
+          });
+          huntCache = { obs: obs || [], hotspots: spots, label: name + ' · ' + activeState + ' · last ' + huntBack + 'd' };
+          setHuntStatus(spots.length + ' sites · ' + (obs || []).length + ' ' + name + ' reports ▾');
+          if (mapMode === 'hunt') renderHuntMap();
+          renderHuntPanel();
+          if (radarScope !== 'state') renderRadar();
+          return;
+        }
+      } catch (e) {
+        setHuntStatus('eBird error: ' + (e.message || e));
+        return;
+      }
+      if (scope === 'state') return;
+      let lat, lng, dist, label;
+      try {
+        if (scope === 'near') {
+          const pos = await new Promise((resolve, reject) => {
+            if (!navigator.geolocation) reject(new Error('no geo'));
+            navigator.geolocation.getCurrentPosition(p => resolve(p), reject, { enableHighAccuracy: true, timeout: 8000 });
+          });
+          lat = pos.coords.latitude; lng = pos.coords.longitude; dist = 25;
+          label = 'Within 25 km of you';
+          if (mapInstance) mapInstance.setView([lat, lng], 11);
+        } else if (scope === 'county') {
+          await resolveStateLocation();
+          if (activeCountyCode) {
+            setHuntStatus('Loading ' + (activeCounty || 'county') + '…');
+            const obs = await ebirdGet('/data/obs/' + activeCountyCode + '/recent', { back: String(huntBack), maxResults: '200', cat: 'species' });
+            huntCache = { obs: obs || [], hotspots: [], label: (activeCounty || 'County') + ' · last ' + huntBack + ' days' };
+            setHuntStatus(huntCache.obs.length + ' reports ▾');
+            if (mapMode === 'hunt') renderHuntMap();
+            renderHuntPanel();
+            renderRadar();
+            return;
+          }
+          const c = mapInstance.getCenter();
+          lat = c.lat; lng = c.lng; dist = 40;
+          label = (activeCounty || 'County area') + ' · last ' + huntBack + ' days';
+        } else if (radiusLocked) {
+          lat = radiusLock.lat; lng = radiusLock.lng; dist = radiusLock.dist;
+          label = dist + ' km locked · last ' + huntBack + ' days';
+        } else {
+          const c = mapInstance.getCenter();
+          lat = c.lat; lng = c.lng; dist = mapRadiusKm();
+          label = dist + ' km around map center · last ' + huntBack + ' days';
+        }
+        setHuntStatus('Loading live eBird…');
+        const [obs, hotspots] = await Promise.all([
+          ebirdGet('/data/obs/geo/recent', { lat: String(lat), lng: String(lng), dist: String(dist), back: String(huntBack), maxResults: '200', cat: 'species' }),
+          ebirdGet('/ref/hotspot/geo', { lat: String(lat), lng: String(lng), dist: String(dist), fmt: 'json', back: String(huntBack) })
+        ]);
+        huntCache = { obs: obs || [], hotspots: hotspots || [], label: label };
+        setHuntStatus((huntCache.hotspots.length || 0) + ' hotspots · ' + (huntCache.obs.length || 0) + ' reports ▾');
+        if (mapMode === 'hunt') renderHuntMap();
+        renderHuntPanel();
+        if (radarScope !== 'state') renderRadar();
+      } catch (e) {
+        setHuntStatus('eBird error: ' + (e.message || e));
+      }
+    }
+
+    function renderHuntMap() {
+      if (!huntLayer || !mapInstance) return;
+      markersLayer.clearLayers();
+      huntLayer.clearLayers();
+      const have = lifeCodes();
+      const showSpots = huntPanelTab !== 'reports';
+      const showBirds = huntPanelTab !== 'hotspots';
+      const spots = showSpots ? (huntCache.hotspots || []).slice(0, 40) : [];
+      for (let i = 0; i < spots.length; i++) {
+        const h = spots[i];
+        if (h.lat == null || h.lng == null) continue;
+        const mk = L.marker([h.lat, h.lng], {
+          icon: L.divIcon({ className: 'hotspot-chit', html: '', iconSize: [12, 12], iconAnchor: [6, 6] })
+        });
+        mk.bindPopup('<div style="min-width:140px;font-size:12px"><b>' + (h.locName || 'Hotspot') + '</b><div class="muted">' + (h.numSpeciesAllTime || '') + ' species all-time</div></div>');
+        huntLayer.addLayer(mk);
+      }
+      const obs = showBirds ? (huntCache.obs || []) : [];
+      let placed = 0;
+      for (let i = 0; i < obs.length && placed < 100; i++) {
+        const o = obs[i];
+        const code = o.speciesCode;
+        if (!code || o.lat == null || o.lng == null) continue;
+        if (!passesHuntFilters(code)) continue;
+        placed++;
+        const color = huntColor(code);
+        const name = o.comName || taxName(code).comName;
+        const mk = L.marker([o.lat, o.lng], {
+          rarity: rarityRank(code),
+          rarityColor: color,
+          speciesCode: code,
+          icon: L.divIcon({
+            className: '',
+            html: '<span style="display:block;width:12px;height:12px;border-radius:50%;background:' + color + ';border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.45)"></span>',
+            iconSize: [14, 14],
+            iconAnchor: [7, 7]
+          })
+        });
+        const sp = speciesFromState(code);
+        mk.bindPopup(
+          '<div style="min-width:160px;font-size:12px"><b>' + name + '</b>' +
+          (have.has(code) ? ' <span class="chip y">Logged</span>' : ' <span class="chip s">Needed</span>') +
+          '<div class="muted">' + (o.locName || '') + '<br>' + (o.obsDt || '') + '</div>' +
+          sparkHTML(sp.monthly) +
+          (have.has(code) ? '' : '<div style="margin-top:8px"><button class="btn-em" onclick="openUploadModal();setFormSpecies(\'' + code + '\')">Log</button></div>') +
+          '</div>'
+        );
+        huntLayer.addLayer(mk);
+      }
+    }
+
+    async function resolveStateLocation() {
+      if (!mapInstance) return;
+      const c = mapInstance.getCenter();
+      try {
+        const res = await fetch('https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=' + c.lat + '&longitude=' + c.lng + '&localityLanguage=en');
+        const data = await res.json();
+        if (data && data.countryCode === 'US' && data.principalSubdivision) {
+          activeState = data.principalSubdivision;
+        }
+        const adm = (((data || {}).localityInfo || {}).administrative) || [];
+        const countyRow = adm.find(r => /county/i.test(r.description || '') || /county/i.test(r.name || '')) || adm.find(r => (r.isoCode || '').split('-').length === 3);
+        activeCounty = countyRow ? String(countyRow.name || '').replace(/ County$/i, '') + ( /county/i.test(countyRow.name || '') ? '' : ' County') : '';
+        if (countyRow && countyRow.name) activeCounty = countyRow.name;
+        activeCountyCode = '';
+        const stateCode = STATE_CODES[activeState];
+        if (stateCode && getEbirdKey()) {
+          if (!countyCache[stateCode]) {
+            try { countyCache[stateCode] = await ebirdGet('/ref/region/list/subnational2/' + stateCode); }
+            catch (e) { countyCache[stateCode] = []; }
+          }
+          const want = (activeCounty || '').toLowerCase().replace(/\s+county$/, '');
+          const hit = (countyCache[stateCode] || []).find(r => String(r.name || '').toLowerCase().replace(/\s+county$/, '') === want);
+          if (hit) activeCountyCode = hit.code;
+        }
+        updateRegionalHUD();
+      } catch (e) {}
+    }
+
+    function setRegionLevel(level) {
+      currentRegionLevel = level;
+      document.getElementById('btn-level-state').className = level === 'state' ? 'on' : '';
+      document.getElementById('btn-level-country').className = level === 'country' ? 'on' : '';
+      updateRegionalHUD();
+    }
+
+    function loggedCodesFor(stateName, countryOnly) {
+      const set = new Set();
+      for (let i = 0; i < sightings.length; i++) {
+        const s = sightings[i];
+        if (countryOnly) {
+          if (s.country === 'United States') set.add(s.species_code);
+        } else if ((s.state || '').toLowerCase() === (stateName || '').toLowerCase()) set.add(s.species_code);
+      }
+      return set;
+    }
+
+    function updateRegionalHUD() {
+      const isCountry = currentRegionLevel === 'country';
+      const code = isCountry ? 'US' : (STATE_CODES[activeState] || 'US-NC');
+      const entry = decodeState(code);
+      const realList = entry.list.filter(sp => isRealSpecies(sp.code));
+      const total = realList.length || 0;
+      const logged = loggedCodesFor(activeState, isCountry);
+      let count = 0;
+      logged.forEach(c => { if (isRealSpecies(c)) count++; });
+      const pct = total ? ((count / total) * 100).toFixed(1) : '0.0';
+      document.getElementById('region-label').textContent = isCountry ? 'United States' : activeState;
+      document.getElementById('region-stats').textContent = count + ' / ' + total + ' (' + pct + '%)';
+      document.getElementById('region-bar').style.width = Math.min(100, Number(pct)) + '%';
+    }
+
+    function sparkHTML(monthly) {
+      if (!monthly || !monthly.length) return '';
+      let html = '<span class="spark">';
+      for (let i = 0; i < monthly.length; i++) {
+        const v = monthly[i] || 0;
+        const h = Math.max(3, Math.min(14, Math.round(v * 14)));
+        const col = v >= 0.45 ? '#10b981' : v >= 0.15 ? '#f97316' : '#78716c';
+        html += '<i class="' + (i === CURRENT_MONTH ? 'now' : '') + '" style="height:' + h + 'px;background:' + col + '"></i>';
+      }
+      return html + '</span>';
+    }
+
+    function statusChip(status) {
+      if (status === 'Year-round Resident') return '<span class="chip y">Year-round</span>';
+      if (status === 'Summer Breeding') return '<span class="chip s">Summer</span>';
+      if (status === 'Winter Visitor') return '<span class="chip w">Winter</span>';
+      if (status === 'Spring/Fall Migrant') return '<span class="chip m">Migrant</span>';
+      return '<span class="chip">Seasonal</span>';
+    }
+
+    function statusBucket(status) {
+      if (status === 'Year-round Resident' || status === 'Resident') return 'Year-round';
+      if (status === 'Summer Breeding') return 'Summer';
+      if (status === 'Winter Visitor') return 'Winter';
+      if (status === 'Spring/Fall Migrant') return 'Migrant';
+      return 'Seasonal';
+    }
+
+    function birdGroup(comName, sciName) {
+      const n = ((comName || '') + ' ' + (sciName || '')).toLowerCase();
+      const hit = (re) => re.test(n);
+      if (hit(/warbler|redstart|ovenbird|waterthrush|parula|yellowthroat|chat\b/)) return 'Warbler';
+      if (hit(/\bhawk\b|eagle|kite|osprey|falcon|kestrel|merlin|harrier|goshawk|accipiter/)) return 'Raptor';
+      if (hit(/\bowl\b/)) return 'Owl';
+      if (hit(/duck|goose|swan|teal|wigeon|pintail|mallard|merganser|scoter|eider|gadwall|shoveler|canvasback|redhead|scaup|goldeneye|bufflehead|whistling-duck/)) return 'Waterfowl';
+      if (hit(/heron|egret|bittern|ibis|spoonbill|stork/)) return 'Wading';
+      if (hit(/sandpiper|plover|yellowlegs|godwit|curlew|snipe|woodcock|phalarope|turnstone|dunlin|knot|dowitcher|oystercatcher|avocet|stilt|willet|sanderling|killdeer|whimbrel/)) return 'Shorebird';
+      if (hit(/gull|tern|skimmer|kittiwake/)) return 'Gull / Tern';
+      if (hit(/woodpecker|sapsucker|flicker/)) return 'Woodpecker';
+      if (hit(/sparrow|junco|towhee|longspur/)) return 'Sparrow';
+      if (hit(/finch|goldfinch|siskin|crossbill|redpoll|grosbeak/)) return 'Finch';
+      if (hit(/blackbird|grackle|oriole|cowbird|meadowlark|bobolink/)) return 'Blackbird';
+      if (hit(/thrush|robin|bluebird|veery|solitaire/)) return 'Thrush';
+      if (hit(/flycatcher|phoebe|kingbird|pewee|kiskadee/)) return 'Flycatcher';
+      if (hit(/vireo/)) return 'Vireo';
+      if (hit(/swallow|martin/)) return 'Swallow';
+      if (hit(/wren/)) return 'Wren';
+      if (hit(/hummingbird/)) return 'Hummingbird';
+      if (hit(/dove|pigeon/)) return 'Dove';
+      if (hit(/wood-pewee/) ) return 'Flycatcher';
+      if (hit(/cardinal|tanager|bunting|dickcissel/)) return 'Cardinal / Tanager';
+      if (hit(/jay|crow|raven|magpie/)) return 'Corvid';
+      if (hit(/chickadee|titmouse/)) return 'Chickadee';
+      if (hit(/nuthatch|creeper/)) return 'Nuthatch';
+      if (hit(/kinglet|gnatcatcher/)) return 'Kinglet';
+      if (hit(/catbird|thrasher|mockingbird/)) return 'Mimic';
+      if (hit(/loon|grebe/)) return 'Loon / Grebe';
+      if (hit(/cormorant|anhinga|pelican|booby|gannet/)) return 'Pelican / Cormorant';
+      if (hit(/petrel|shearwater|fulmar|storm-petrel/)) return 'Tubenoose';
+      if (hit(/rail|coot|gallinule|moorhen|sora|crake/)) return 'Rail';
+      if (hit(/crane/)) return 'Crane';
+      if (hit(/turkey|quail|grouse|pheasant|bobwhite|prairie-chicken/)) return 'Upland game';
+      if (hit(/nightjar|nighthawk|whip-poor-will|chuck-will/)) return 'Nightjar';
+      if (hit(/swift/)) return 'Swift';
+      if (hit(/kingfisher/)) return 'Kingfisher';
+      if (hit(/vulture/)) return 'Vulture';
+      if (hit(/waxwing|starling|pipit|lark|shrike/)) return 'Other passerine';
+      return 'Other';
+    }
+
+    function nextMilestone(have, total) {
+      const marks = [10, 25, 50, 100, 150, 200, 250, 300, 400, 500, 600];
+      for (let i = 0; i < marks.length; i++) {
+        if (have < marks[i] && marks[i] <= total) return { next: marks[i], left: marks[i] - have };
+      }
+      return null;
+    }
+
+    function firstStateRecord(code, stateName, isCountry) {
+      const rows = sightings.filter(s => s.species_code === code && (isCountry || (s.state || '') === stateName));
+      if (!rows.length) return null;
+      rows.sort((a,b) => String(a.date).localeCompare(String(b.date)));
+      return rows[0];
+    }
+
+    function jumpSpeciesToRadarMap(code) {
+      if (!code) return;
+      switchTab('map');
+      huntBack = 30;
+      [3, 7, 30].forEach(d => {
+        const el = document.getElementById('btn-hunt-' + d + 'd');
+        if (el) el.className = d === 30 ? 'on' : '';
+      });
+      setMapMode('hunt');
+      setMapSpeciesFilter(code);
+    }
+
+    function showMissingOnMap(code) {
+      closeRegionSpeciesModal();
+      jumpSpeciesToRadarMap(code);
+    }
+
+    function setChecklistStatusFilter(value) {
+      checklistStatus = value || 'all';
+      renderChecklistViews();
+    }
+
+    function setChecklistGroupFilter(value) {
+      checklistGroup = value || 'all';
+      renderChecklistViews();
+    }
+
+    function setChecklistWindow(w) {
+      checklistWindow = w || 'all';
+      ['30d','1y','all'].forEach(x => {
+        const el = document.getElementById('btn-check-' + x);
+        if (el) el.className = x === checklistWindow ? 'on' : '';
+      });
+      renderChecklistViews();
+    }
+
+    function inCheckWindow(dateStr) {
+      if (checklistWindow === 'all') return true;
+      const t = new Date(dateStr || '').getTime();
+      if (!isFinite(t)) return false;
+      const days = (Date.now() - t) / 86400000;
+      if (checklistWindow === '30d') return days >= 0 && days <= 30;
+      if (checklistWindow === '1y') return days >= 0 && days <= 366;
+      return true;
+    }
+
+    function loggedCodesForWindow(stateName, countryOnly) {
+      const set = new Set();
+      for (let i = 0; i < sightings.length; i++) {
+        const s = sightings[i];
+        const locOk = countryOnly ? s.country === 'United States' : ((s.state || '').toLowerCase() === (stateName || '').toLowerCase());
+        if (!locOk || !inCheckWindow(s.date)) continue;
+        set.add(s.species_code);
+      }
+      return set;
+    }
+
+    function firstStateRecordInWindow(code, stateName, isCountry) {
+      const rows = sightings.filter(s => s.species_code === code && (isCountry || (s.state || '') === stateName) && inCheckWindow(s.date));
+      if (!rows.length) return null;
+      rows.sort((a,b) => String(a.date).localeCompare(String(b.date)));
+      return rows[0];
+    }
+
+    function setTimeFilter(filter) {
+      currentTimeFilter = filter;
+      ['30d','1y','all'].forEach(f => {
+        const el = document.getElementById('btn-time-' + f);
+        if (el) el.className = f === filter ? 'on' : '';
+      });
+      scheduleMarkers();
+    }
+    function applyMapFilters() {
+      scheduleMarkers();
+      if (mapMode === 'hunt') renderHuntMap();
+    }
+
+    function stateSpeciesCatalog() {
+      const entry = decodeState(STATE_CODES[activeState] || 'US-NC');
+      const rows = [];
+      for (let i = 0; i < entry.list.length; i++) {
+        const sp = entry.list[i];
+        if (!isRealSpecies(sp.code)) continue;
+        rows.push({ code: sp.code, ...taxName(sp.code) });
+      }
+      rows.sort((a,b) => a.comName.localeCompare(b.comName));
+      return rows;
+    }
+
+    function toggleMapSpeciesList() {
+      const box = document.getElementById('map-species-results');
+      if (box.classList.contains('on')) box.classList.remove('on');
+      else openMapSpeciesList();
+    }
+
+    function openMapSpeciesList() {
+      const input = document.getElementById('map-species-search');
+      if (input) input.value = '';
+      filterMapSpeciesList();
+      document.getElementById('map-species-results').classList.add('on');
+      if (input) input.focus();
+    }
+
+    function filterMapSpeciesList() {
+      const q = (document.getElementById('map-species-search').value || '').trim().toLowerCase();
+      const box = document.getElementById('map-species-hits');
+      if (!q) {
+        box.innerHTML = '<div class="hint" style="padding:10px">Type a name to see matches.</div>';
+        return;
+      }
+      const hits = stateSpeciesCatalog().filter(r =>
+        nameMatches(r.comName, q) || nameMatches(r.sciName, q) || nameMatches(r.code, q)
+      ).slice(0, 30);
+      box.innerHTML = hits.map(h =>
+        '<button type="button" onclick="setMapSpeciesFilter(\'' + h.code + '\')"><b>' + h.comName + '</b><div class="muted" style="font-style:italic">' + h.sciName + '</div></button>'
+      ).join('') || '<div class="hint" style="padding:10px">No matches.</div>';
+    }
+
+    function setMapSpeciesFilter(code) {
+      currentSpeciesFilter = code || 'all';
+      const btn = document.getElementById('map-species-btn');
+      if (btn) btn.textContent = (code === 'all' ? 'All Species' : taxName(code).comName) + ' ▾';
+      document.getElementById('map-species-results').classList.remove('on');
+      applyMapFilters();
+      if (mapMode === 'hunt') loadHuntData();
+    }
+
+    function focusSpeciesOnMap(code) {
+      jumpSpeciesToRadarMap(code);
+    }
+    function scheduleMarkers() {
+      clearTimeout(markerTimer);
+      markerTimer = setTimeout(renderMapMarkers, 50);
+    }
+
+    function renderMapMarkers() {
+      if (!markersLayer || !mapInstance) return;
+      if (mapMode === 'hunt') { renderHuntMap(); return; }
+      if (huntLayer) huntLayer.clearLayers();
+      markersLayer.clearLayers();
+      const now = Date.now();
+      const filtered = [];
+      for (let i = 0; i < sightings.length; i++) {
+        const s = sightings[i];
+        if (currentSpeciesFilter !== 'all' && s.species_code !== currentSpeciesFilter) continue;
+        if (currentTimeFilter !== 'all') {
+          const days = (now - new Date(s.date).getTime()) / 86400000;
+          if (currentTimeFilter === '7d' && days > 7) continue;
+          if (currentTimeFilter === '30d' && days > 30) continue;
+          if (currentTimeFilter === '1y' && days > 365) continue;
+        }
+        filtered.push(s);
+      }
+      const max = 80;
+      const slice = filtered.length > max ? filtered.slice(0, max) : filtered;
+      const usePhotos = mapInstance.getZoom() >= 10;
+      for (let i = 0; i < slice.length; i++) {
+        const s = slice[i];
+        const name = taxName(s.species_code).comName;
+        const color = huntColor(s.species_code);
+        const rarity = rarityRank(s.species_code);
+        let marker;
+        if (usePhotos && s.photo_url) {
+          marker = L.marker([s.lat, s.lng], {
+            rarity: rarity,
+            rarityColor: color,
+            speciesCode: s.species_code,
+            sightingId: s.id,
+            icon: L.divIcon({
+              className: 'bird-chit',
+              html: '<span style="display:block;width:36px;height:36px;border-radius:50%;border:3px solid ' + color + ';background:#0c0a09 url(\'' + s.photo_url + '\') center / contain no-repeat"></span>',
+              iconSize: [40, 40],
+              iconAnchor: [20, 20]
+            })
+          });
+        } else {
+          marker = L.circleMarker([s.lat, s.lng], {
+            radius: 8, fillColor: color, color: '#fff', weight: 2, fillOpacity: 0.95,
+            rarity: rarity, rarityColor: color, speciesCode: s.species_code, sightingId: s.id
+          });
+        }
+        const sid = s.id;
+        marker.bindPopup(
+          '<div class="popup-open" data-sid="' + sid + '">' +
+          (s.photo_url ? '<img src="' + s.photo_url + '" alt="" />' : '') +
+          '<b>' + name + '</b><div class="muted">📍 ' + s.location_name + '<br>📅 ' + s.date + '</div>' +
+          '<div class="hint" style="margin-top:6px">Tap for details</div></div>',
+          { closeButton: true, autoPan: true }
+        );
+        marker.on('popupopen', function (e) {
+          const root = e.popup.getElement();
+          if (!root) return;
+          const go = function (ev) {
+            if (ev.target && ev.target.classList && ev.target.classList.contains('leaflet-popup-close-button')) return;
+            L.DomEvent.stop(ev);
+            openSightingFromMap(sid);
+          };
+          L.DomEvent.on(root, 'click', go);
+          L.DomEvent.on(root, 'mousedown', L.DomEvent.stopPropagation);
+          L.DomEvent.on(root, 'touchend', go);
+        });
+        markersLayer.addLayer(marker);
+      }
+    }
+
+    function groupBySpecies() {
+      const map = new Map();
+      for (let i = 0; i < sightings.length; i++) {
+        const s = sightings[i];
+        let g = map.get(s.species_code);
+        if (!g) {
+          g = { species_code: s.species_code, first: s.date, last: s.date, count: 0, cover: s.photo_url, loc: s.location_name };
+          map.set(s.species_code, g);
+        }
+        g.count++;
+        if (s.date < g.first) g.first = s.date;
+        if (s.date > g.last) g.last = s.date;
+        if (s.is_cover && s.photo_url) g.cover = s.photo_url;
+        if (s.photo_url && !g.cover) g.cover = s.photo_url;
+      }
+      return Array.from(map.values());
+    }
+
+    function renderLifeList() {
+      const sort = document.getElementById('lifelist-sort').value;
+      let list = groupBySpecies();
+      list.forEach(item => Object.assign(item, taxName(item.species_code)));
+      if (sort === 'recent') list.sort((a,b) => b.last.localeCompare(a.last));
+      else if (sort === 'count') list.sort((a,b) => b.count - a.count);
+      else if (sort === 'alpha') list.sort((a,b) => a.comName.localeCompare(b.comName));
+      else list.sort((a,b) => a.first.localeCompare(b.first));
+      document.getElementById('lifelist-subtitle').textContent = list.length + ' Lifers documented';
+      document.getElementById('lifelist-grid').innerHTML = list.map(item =>
+        '<div class="card" onclick="openSpeciesDossier(\'' + item.species_code + '\')">' +
+          (item.cover ? '<img src="' + item.cover + '" loading="lazy" alt="" />' : '<div class="ph">No Photo</div>') +
+          '<div class="meta"><h3>' + item.comName + '</h3><div class="muted" style="font-style:italic">' + item.sciName + '</div>' +
+          '<div class="muted mono">Lifer: ' + fmtShortDate(item.first) + ' · ' + item.count + ' logs</div></div></div>'
+      ).join('');
+    }
+
+    function renderGallery() {
+      const filterEl = document.getElementById('gallery-species-filter');
+      const sortEl = document.getElementById('gallery-sort');
+      const filter = filterEl ? filterEl.value : 'all';
+      const sort = sortEl ? sortEl.value : 'newest';
+      const photos = sightings.filter(s => s.photo_url && (filter === 'all' || s.species_code === filter));
+      photos.forEach(p => { p._name = taxName(p.species_code).comName; });
+      if (sort === 'oldest') photos.sort((a,b) => a.date.localeCompare(b.date));
+      else if (sort === 'location') photos.sort((a,b) => (a.location_name || '').localeCompare(b.location_name || '') || b.date.localeCompare(a.date));
+      else if (sort === 'az') photos.sort((a,b) => a._name.localeCompare(b._name) || b.date.localeCompare(a.date));
+      else if (sort === 'za') photos.sort((a,b) => b._name.localeCompare(a._name) || b.date.localeCompare(a.date));
+      else photos.sort((a,b) => b.date.localeCompare(a.date));
+      document.getElementById('gallery-subtitle').textContent = photos.length + ' photos';
+      document.getElementById('gallery-grid').innerHTML = photos.map(p =>
+        '<div class="card' + (Number(p.is_cover) ? ' cover' : '') + '" onclick="openDetailModal(\'' + p.id + '\')">' +
+          (Number(p.is_cover) ? coverMarkHTML() : '') +
+          '<img src="' + p.photo_url + '" loading="lazy" alt="" />' +
+          '<div class="meta"><h4>' + p._name + '</h4><div class="muted mono">' + p.date + ' · ' + (p.location_name || '') + '</div></div></div>'
+      ).join('');
+    }
+
+    function onRadarScopeChange() {
+      radarScope = document.getElementById('radar-scope').value || 'state';
+      if (radarScope === 'state') { renderRadar(); return; }
+      if (!requireEbirdKey()) { document.getElementById('radar-scope').value = 'state'; radarScope = 'state'; renderRadar(); return; }
+      loadHuntData('radar');
+    }
+
+    function renderRadar() {
+      const code = STATE_CODES[activeState] || 'US-NC';
+      const entry = decodeState(code);
+      const have = lifeCodes();
+      const sort = (document.getElementById('radar-sort') || {}).value || 'prob';
+      const shown = (document.getElementById('radar-shown') || {}).value || 'all';
+      const targets = [];
+      const nearby = shown === 'nearby' || (radarScope !== 'state' && shown !== 'all');
+      if (!nearby) {
+        for (let i = 0; i < entry.list.length; i++) {
+          const sp = entry.list[i];
+          if (!isRealSpecies(sp.code) || have.has(sp.code)) continue;
+          if (shown === 'month' && monthProb(sp) <= 0) continue;
+          targets.push({ ...sp, prob: monthProb(sp), ...taxName(sp.code) });
+        }
+      } else {
+        const seen = new Set();
+        (huntCache.obs || []).forEach(o => {
+          const spCode = o.speciesCode;
+          if (!spCode || seen.has(spCode) || have.has(spCode)) return;
+          if (DATA.T[spCode] && !isRealSpecies(spCode)) return;
+          seen.add(spCode);
+          const sp = speciesFromState(spCode);
+          if (shown === 'month' && monthProb(sp) <= 0) return;
+          const n = taxName(spCode);
+          targets.push({ ...sp, code: spCode, prob: monthProb(sp), loc: o.locName, when: o.obsDt, comName: n.comName !== spCode ? n.comName : (o.comName || spCode), sciName: n.sciName || o.sciName || '' });
+        });
+      }
+      if (sort === 'az') targets.sort((a,b) => a.comName.localeCompare(b.comName));
+      else if (sort === 'status') targets.sort((a,b) => a.status.localeCompare(b.status) || b.prob - a.prob);
+      else if (sort === 'probAsc') targets.sort((a,b) => a.prob - b.prob || a.comName.localeCompare(b.comName));
+      else if (sort === 'year') targets.sort((a,b) => yearTotal(b) - yearTotal(a) || a.comName.localeCompare(b.comName));
+      else if (sort === 'yearAsc') targets.sort((a,b) => yearTotal(a) - yearTotal(b) || a.comName.localeCompare(b.comName));
+      else targets.sort((a,b) => b.prob - a.prob || a.comName.localeCompare(b.comName));
+      const countEl = document.getElementById('radar-count');
+      const scopeLabel = radarScope === 'state' ? activeState : (huntCache.label || radarScope);
+      if (countEl) countEl.textContent = targets.length + ' unlogged targets · ' + scopeLabel;
+      if (radarFocusCode && !targets.some(t => t.code === radarFocusCode)) {
+        const shownEl = document.getElementById('radar-shown');
+        if (shownEl && shownEl.value !== 'all') { shownEl.value = 'all'; renderRadar(); return; }
+      }
+      document.getElementById('radar-list').innerHTML = targets.map(t => {
+        const b = seasonBucket(t);
+        return '<div class="row-card' + (radarFocusCode === t.code ? ' hl' : '') + '" id="radar-row-' + t.code + '" onclick="jumpSpeciesToRadarMap(\'' + t.code + '\')" style="cursor:pointer"><div>' +
+        '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><b>' + t.comName + '</b> ' + statusChip(t.status) + '</div>' +
+        '<div class="muted" style="font-style:italic">' + t.sciName + '</div>' +
+        sparkHTML(t.monthly) + ' <span class="mono" style="font-size:10px;color:' + b.color + '">' + MONTH_LABELS[CURRENT_MONTH] + ' ' + seasonScore(t) + '/10</span>' +
+        (t.loc ? '<div class="muted">' + t.loc + (t.when ? ' · ' + t.when : '') + '</div>' : '') + '</div>' +
+        '<button class="ghost" onclick="event.stopPropagation();openUploadModal();setFormSpecies(\'' + t.code + '\')">Log</button></div>';
+      }).join('') || '<div class="hint">All regional targets logged.</div>';
+      if (radarFocusCode) {
+        const el = document.getElementById('radar-row-' + radarFocusCode);
+        if (el) setTimeout(() => el.scrollIntoView({ block: 'center', behavior: 'smooth' }), 40);
+      }
+    }
+
+    function stashChecklistScroll() {
+      const body = document.querySelector('#region-species-modal .sheet-b');
+      if (body) checklistScroll = body.scrollTop;
+    }
+
+    function resetChecklistSession() {
+      checklistWindow = 'all';
+      checklistRarity = 'all';
+      checklistStatus = 'all';
+      checklistGroup = 'all';
+      checklistResume = false;
+      checklistScroll = 0;
+      modalTab = 'discovered';
+      const search = document.getElementById('checklist-search');
+      if (search) search.value = '';
+      const sort = document.getElementById('checklist-sort');
+      if (sort) sort.value = 'az';
+      ['30d','1y','all'].forEach(x => {
+        const el = document.getElementById('btn-check-' + x);
+        if (el) el.className = x === 'all' ? 'on' : '';
+      });
+    }
+
+    function dismissChecklistModal(reset) {
+      stashChecklistScroll();
+      if (reset) resetChecklistSession();
+      document.getElementById('region-species-modal').classList.remove('on');
+    }
+
+    async function openRegionSpeciesModal() {
+      document.getElementById('modal-region-title').textContent = currentRegionLevel === 'country' ? 'United States' : activeState;
+      document.getElementById('region-species-modal').classList.add('on');
+      switchRegionModalTab(modalTab || 'discovered');
+      if (!DATA.S || !Object.keys(DATA.S).length) {
+        document.getElementById('checklist-score').textContent = 'Loading…';
+        await loadData();
+      }
+      renderChecklistViews();
+      const body = document.querySelector('#region-species-modal .sheet-b');
+      if (body) body.scrollTop = checklistScroll || 0;
+    }
+    function closeRegionSpeciesModal() { dismissChecklistModal(false); }
+    function switchRegionModalTab(tab) {
+      modalTab = tab;
+      document.getElementById('modal-discovered-view').style.display = tab === 'discovered' ? 'block' : 'none';
+      document.getElementById('modal-missing-view').style.display = tab === 'missing' ? 'block' : 'none';
+      document.getElementById('tab-btn-discovered').className = tab === 'discovered' ? 'on' : '';
+      document.getElementById('tab-btn-missing').className = tab === 'missing' ? 'on' : '';
+    }
+    function scheduleChecklistRender() {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(renderChecklistViews, 80);
+    }
+
+    function setChecklistRarity(r) {
+      if (r === 'all') checklistRarity = 'all';
+      else checklistRarity = checklistRarity === r ? 'all' : r;
+      if (checklistRarity !== 'all') switchRegionModalTab('missing');
+      renderChecklistViews();
+    }
+
+    function rarityBucket(code) {
+      const r = rarityRank(code);
+      if (r <= 1) return 'common';
+      if (r === 2) return 'uncommon';
+      return 'rare';
+    }
+
+    function ringSVG(id, pct, color, label, sub) {
+      const r = 32, c = 2 * Math.PI * r, p = Math.max(0, Math.min(1, pct || 0));
+      const on = checklistRarity === id ? ' on' : '';
+      return '<button type="button" class="ring-wrap' + on + '" onclick="setChecklistRarity(\'' + id + '\')"><svg viewBox="0 0 88 88" width="88" height="88">' +
+        '<circle cx="44" cy="44" r="' + r + '" fill="none" stroke="#292524" stroke-width="8"/>' +
+        '<circle class="ring-fill" data-ring="' + id + '" data-pct="' + p + '" cx="44" cy="44" r="' + r + '" fill="none" stroke="' + color + '" stroke-width="8" stroke-linecap="round" stroke-dasharray="' + c.toFixed(2) + '" stroke-dashoffset="' + c.toFixed(2) + '" transform="rotate(-90 44 44)"/>' +
+        '<text x="44" y="49" text-anchor="middle" fill="#fafaf9" font-size="15" font-weight="700">' + Math.round(p * 100) + '</text></svg>' +
+        '<div class="ring-label">' + label + '</div><div class="muted">' + sub + '</div></button>';
+    }
+
+    function animateChecklistRings() {
+      const circ = 2 * Math.PI * 32;
+      requestAnimationFrame(() => {
+        document.querySelectorAll('#checklist-rings .ring-fill').forEach(el => {
+          const p = Number(el.getAttribute('data-pct') || 0);
+          el.style.strokeDashoffset = String(circ * (1 - p));
+        });
+      });
+    }
+
+    function sparkBars(values, color) {
+      const max = Math.max(1, ...values);
+      const w = 240, h = 44, n = Math.max(1, values.length), bw = w / n;
+      return '<svg viewBox="0 0 ' + w + ' ' + h + '" width="100%" height="44">' +
+        values.map((v, i) => {
+          const bh = Math.max(v ? 2 : 0, (v / max) * h);
+          return '<rect x="' + (i * bw + 0.6) + '" y="' + (h - bh) + '" width="' + Math.max(1.2, bw - 1.2) + '" height="' + bh + '" fill="' + color + '" rx="1"/>';
+        }).join('') + '</svg>';
+    }
+
+    function sparkLine(values, color) {
+      const max = Math.max(1, ...values);
+      const w = 240, h = 44, n = Math.max(2, values.length);
+      const pts = values.map((v, i) => {
+        const x = (i / (n - 1)) * w;
+        const y = h - (v / max) * (h - 2) - 1;
+        return x.toFixed(1) + ',' + y.toFixed(1);
+      }).join(' ');
+      return '<svg viewBox="0 0 ' + w + ' ' + h + '" width="100%" height="44"><polyline fill="none" stroke="' + color + '" stroke-width="2" points="' + pts + '"/></svg>';
+    }
+
+    function regionLogs(isCountry) {
+      return sightings.filter(s => isCountry ? (s.country === 'United States') : ((s.state || '') === activeState));
+    }
+
+    function sortSpeciesRows(list, sort) {
+      if (sort === 'za') list.sort((a,b) => b.comName.localeCompare(a.comName));
+      else if (sort === 'first') list.sort((a,b) => String((a.firstRec && a.firstRec.date) || '9999').localeCompare(String((b.firstRec && b.firstRec.date) || '9999')) || a.comName.localeCompare(b.comName));
+      else if (sort === 'status') list.sort((a,b) => a.status.localeCompare(b.status) || a.comName.localeCompare(b.comName));
+      else list.sort((a,b) => a.comName.localeCompare(b.comName));
+    }
+
+    function renderChecklistViews() {
+      const isCountry = currentRegionLevel === 'country';
+      const stateName = isCountry ? '' : activeState;
+      const code = isCountry ? 'US' : (STATE_CODES[activeState] || 'US-NC');
+      const entry = decodeState(code);
+      const have = loggedCodesForWindow(activeState, isCountry);
+      const q = (document.getElementById('checklist-search').value || '').toLowerCase();
+      const statusF = checklistStatus || 'all';
+      const groupF = checklistGroup || 'all';
+      const sort = (document.getElementById('checklist-sort') || {}).value || 'az';
+
+      const allRows = [];
+      for (let i = 0; i < entry.list.length; i++) {
+        const sp = entry.list[i];
+        if (!isRealSpecies(sp.code)) continue;
+        const n = taxName(sp.code);
+        const group = birdGroup(n.comName, n.sciName);
+        const logged = have.has(sp.code);
+        const firstRec = logged ? firstStateRecordInWindow(sp.code, activeState, isCountry) : null;
+        allRows.push({ ...sp, ...n, group, logged, firstRec });
+      }
+
+      const scoped = allRows.filter(row => {
+        if (statusF !== 'all' && row.status !== statusF && !(statusF === 'Year-round Resident' && row.status === 'Resident')) return false;
+        if (groupF !== 'all' && row.group !== groupF) return false;
+        return true;
+      });
+      const total = scoped.length;
+      const haveN = scoped.filter(r => r.logged).length;
+      const pct = total ? (haveN / total) : 0;
+      document.getElementById('checklist-score').textContent = haveN + ' / ' + total + ' · ' + (pct * 100).toFixed(1) + '%';
+      const mile = nextMilestone(haveN, total);
+      const winLabel = checklistWindow === '30d' ? ' in 30 days' : checklistWindow === '1y' ? ' this year' : '';
+      document.getElementById('checklist-mile').textContent = mile ? (mile.left + ' more to ' + mile.next + winLabel) : (total ? 'Checklist complete for this filter' : 'Seasonality file not loaded yet');
+
+      const common = scoped.filter(r => rarityRank(r.code) <= 1);
+      const uncommon = scoped.filter(r => rarityRank(r.code) === 2);
+      const rare = scoped.filter(r => rarityRank(r.code) >= 3);
+      document.getElementById('checklist-rings').innerHTML =
+        ringSVG('all', pct, '#34d399', 'All', haveN + '/' + total) +
+        ringSVG('common', common.length ? common.filter(r => r.logged).length / common.length : 0, '#fbbf24', 'Common', common.filter(r => r.logged).length + '/' + common.length) +
+        ringSVG('uncommon', uncommon.length ? uncommon.filter(r => r.logged).length / uncommon.length : 0, '#fb923c', 'Uncommon', uncommon.filter(r => r.logged).length + '/' + uncommon.length) +
+        ringSVG('rare', rare.length ? rare.filter(r => r.logged).length / rare.length : 0, '#c084fc', 'Rare', rare.filter(r => r.logged).length + '/' + rare.length);
+      animateChecklistRings();
+
+      const statusOrder = [
+        ['Year-round', 'Year-round Resident'],
+        ['Migrant', 'Spring/Fall Migrant'],
+        ['Summer', 'Summer Breeding'],
+        ['Winter', 'Winter Visitor'],
+        ['Seasonal', 'Seasonal']
+      ];
+      document.getElementById('checklist-status-break').innerHTML = statusOrder.map(([label, value]) => {
+        const rows = allRows.filter(r => statusBucket(r.status) === label);
+        if (!rows.length) return '';
+        const got = rows.filter(r => r.logged).length;
+        const on = statusF === value ? ' on' : '';
+        return '<button type="button" class="check-pill' + on + '" onclick="setChecklistStatusFilter(\'' + (statusF === value ? 'all' : value) + '\')">' + label + ' ' + got + '/' + rows.length + '</button>';
+      }).join('');
+
+      const groups = {};
+      allRows.forEach(r => {
+        if (!groups[r.group]) groups[r.group] = { total: 0, have: 0 };
+        groups[r.group].total++;
+        if (r.logged) groups[r.group].have++;
+      });
+      const groupNames = Object.keys(groups).sort((a,b) => groups[b].total - groups[a].total || a.localeCompare(b));
+      document.getElementById('checklist-group-break').innerHTML = groupNames.slice(0, 10).map(g => {
+        const on = groupF === g ? ' on' : '';
+        return '<button type="button" class="check-pill' + on + '" onclick="setChecklistGroupFilter(\'' + (groupF === g ? 'all' : g) + '\')">' + g + ' ' + groups[g].have + '/' + groups[g].total + '</button>';
+      }).join('');
+
+      const disc = [];
+      const miss = [];
+      allRows.forEach(row => {
+        if (statusF !== 'all' && row.status !== statusF && !(statusF === 'Year-round Resident' && row.status === 'Resident')) return;
+        if (groupF !== 'all' && row.group !== groupF) return;
+        if (checklistRarity !== 'all' && rarityBucket(row.code) !== checklistRarity) return;
+        if (q && !nameMatches(row.comName, q) && !nameMatches(row.sciName, q) && !nameMatches(row.status, q) && !nameMatches(row.group, q)) return;
+        if (row.logged) disc.push(row);
+        else miss.push(row);
+      });
+      sortSpeciesRows(disc, sort);
+      sortSpeciesRows(miss, sort);
+      document.getElementById('modal-discovered-count').textContent = disc.length;
+      document.getElementById('modal-missing-count').textContent = miss.length;
+      if (modalTab === 'discovered' && !disc.length && miss.length) switchRegionModalTab('missing');
+      else if (modalTab === 'missing' && !miss.length && disc.length) switchRegionModalTab('discovered');
+      document.getElementById('modal-summary-pct').textContent = (disc.length + miss.length) + ' shown · ' + total + ' countable';
+
+      document.getElementById('modal-discovered-view').innerHTML = disc.map(item => {
+        const rec = item.firstRec;
+        const photo = rec && (rec.photo_url || '');
+        const when = rec ? fmtShortDate(rec.date) : '';
+        const where = rec ? (rec.location_name || rec.state || '') : '';
+        return '<div class="row-card" onclick="openDiscoveredFromChecklist(\'' + item.code + '\')">' +
+          (photo ? '<img class="check-thumb" src="' + photo + '" alt="" />' : '') +
+          '<div><b>' + item.comName + '</b> ' + statusChip(item.status) + ' <span class="chip">' + item.group + '</span>' +
+          '<div class="muted" style="font-style:italic">' + item.sciName + '</div>' +
+          '<div class="muted mono">' + (when ? ('First: ' + when) : 'Logged') + (where ? (' · ' + where) : '') + '</div></div></div>';
+      }).join('') || '<div class="hint">No matching discovered species.</div>';
+
+      document.getElementById('modal-missing-view').innerHTML = miss.map(item =>
+        '<div class="row-card" onclick="openTargetFromChecklist(\'' + item.code + '\')"><div><b>' + item.comName + '</b> ' + statusChip(item.status) + ' <span class="chip">' + item.group + '</span>' +
+        '<div class="muted" style="font-style:italic">' + item.sciName + '</div></div>' +
+        '<button class="ghost" type="button" onclick="event.stopPropagation();showMissingOnMap(\'' + item.code + '\')">Show on map</button></div>'
+      ).join('') || '<div class="hint">No matching missing species.</div>';
+    }
+
+    function openDiscoveredFromChecklist(code) {
+      const body = document.querySelector('#region-species-modal .sheet-b');
+      checklistScroll = body ? body.scrollTop : 0;
+      checklistResume = true;
+      closeRegionSpeciesModal();
+      openSpeciesDossier(code);
+    }
+
+    function openTargetFromChecklist(code) {
+      checklistResume = false;
+      closeRegionSpeciesModal();
+      const shown = document.getElementById('radar-shown');
+      if (shown) shown.value = 'all';
+      radarFocusCode = code;
+      switchTab('radar');
+    }
+
+    function restoreChecklistModal() {
+      openRegionSpeciesModal();
+    }
+
+    function openSpeciesDossier(code) {
+      const row = sightings.filter(s => s.species_code === code).sort((a,b) => (b.is_cover - a.is_cover) || b.date.localeCompare(a.date))[0];
+      if (row) openDetailModal(row.id);
+    }
+
+    function flyToCurrentSighting() {
+      const s = sightings.find(x => x.id === currentDetailId);
+      if (!s || s.lat == null || s.lng == null) return;
+      closeDetailModal({ skipResume: true });
+      switchTab('map');
+      if (typeof setMapMode === 'function') setMapMode('photos');
+      if (!mapInstance) return;
+      skipHuntMove = 2;
+      mapInstance.setView([Number(s.lat), Number(s.lng)], 16, { animate: true });
+      setTimeout(() => {
+        if (!markersLayer) return;
+        markersLayer.eachLayer(layer => {
+          if (layer.options && layer.options.sightingId === s.id && layer.openPopup) layer.openPopup();
+        });
+      }, 250);
+    }
+
+    function openSightingFromMap(id) {
+      if (mapInstance && mapInstance.closePopup) mapInstance.closePopup();
+      openDetailModal(id);
+    }
+
+    function openDetailModal(id) {
+      const s = sightings.find(x => x.id === id);
+      if (!s) return;
+      currentDetailId = id;
+      const n = taxName(s.species_code);
+      document.getElementById('detail-img').src = s.photo_url || '';
+      document.getElementById('detail-common-name').textContent = n.comName;
+      document.getElementById('detail-scientific-name').textContent = n.sciName;
+      document.getElementById('detail-date').textContent = s.date;
+      document.getElementById('detail-location').textContent = s.location_name;
+      document.getElementById('detail-state').textContent = s.state;
+      document.getElementById('detail-coords').textContent = Number(s.lat).toFixed(4) + ', ' + Number(s.lng).toFixed(4);
+      document.getElementById('detail-notes').textContent = s.notes ? '"' + s.notes + '"' : '';
+      const sibs = sightings.filter(x => x.species_code === s.species_code).sort((a,b) => Number(b.is_cover) - Number(a.is_cover) || b.date.localeCompare(a.date));
+      document.getElementById('detail-sibling-count').textContent = sibs.length;
+      document.getElementById('detail-siblings').innerHTML = sibs.map(item =>
+        '<div onclick="openDetailModal(\'' + item.id + '\')" style="width:64px;flex:none;cursor:pointer">' +
+        '<img src="' + (item.photo_url || '') + '" loading="lazy" style="width:64px;height:64px;object-fit:cover;border-radius:8px;border:2px solid ' + (Number(item.is_cover) ? '#fbbf24' : (item.id === s.id ? '#10b981' : '#444')) + '" />' +
+        '<div class="muted mono" style="text-align:center">' + (Number(item.is_cover) ? '★ ' : '') + item.date.slice(5) + '</div></div>'
+      ).join('');
+      const coverBtn = document.getElementById('btn-toggle-cover-detail');
+      coverBtn.textContent = Number(s.is_cover) ? 'Cover ✓' : 'Cover';
+      coverBtn.onclick = function () { setBestPhoto(s.id); };
+      document.getElementById('detail-modal').classList.add('on');
+    }
+
+    function setBestPhoto(id) {
+      const s = sightings.find(x => x.id === id);
+      if (!s) return;
+      sightings.forEach(x => { if (x.species_code === s.species_code) x.is_cover = 0; });
+      s.is_cover = 1;
+      persistSightings();
+      renderLifeList();
+      renderGallery();
+      renderMapMarkers();
+      openDetailModal(s.id);
+    }
+
+    function editCurrentSighting() {
+      if (!currentDetailId) return;
+      const s = sightings.find(x => x.id === currentDetailId);
+      if (!s) return;
+      closeDetailModal({ skipResume: true });
+      editingId = s.id;
+      document.getElementById('upload-title').textContent = 'Edit Sighting';
+      document.getElementById('btn-delete-sighting').style.display = 'inline-block';
+      setFormSpecies(s.species_code);
+      document.getElementById('form-location').value = s.location_name || '';
+      document.getElementById('form-state').value = s.state || '';
+      document.getElementById('form-date').value = s.date || '';
+      document.getElementById('form-notes').value = s.notes || '';
+      document.getElementById('form-is-cover').checked = !!Number(s.is_cover);
+      syncFormCoverButton();
+      document.getElementById('form-file').value = '';
+      setFormCoordinates(Number(s.lat) || 36.1, Number(s.lng) || -80.24, false);
+      document.getElementById('upload-modal').classList.add('on');
+      const src = s.photo_full || s.photo_url;
+      if (src) {
+        crop.fullDataUrl = s.photo_full || null;
+        loadCropImage(src, false, s.crop_meta);
+        document.getElementById('crop-hint').textContent = 'Drag to frame the bird. What you see in the square is what gets saved.';
+      } else {
+        resetCropper();
+      }
+    }
+
+    function deleteSighting(id) {
+      if (!id) return;
+      if (!confirm('Delete this sighting permanently?')) return;
+      const idx = sightings.findIndex(s => s.id === id);
+      if (idx < 0) return;
+      sightings.splice(idx, 1);
+      persistSightings();
+      closeUploadModal();
+      closeDetailModal();
+      refreshUI();
+      renderLifeList();
+      renderGallery();
+      renderRadar();
+    }
+    function closeDetailModal(opts) {
+      document.getElementById('detail-modal').classList.remove('on');
+      if (opts && opts.skipResume) {
+        checklistResume = false;
+        return;
+      }
+      if (checklistResume) {
+        checklistResume = false;
+        restoreChecklistModal();
+      }
+    }
+
+    function setFormSpecies(code) {
+      document.getElementById('form-species').value = code || '';
+      const n = taxName(code);
+      document.getElementById('form-species-search').value = n.comName ? (n.comName + (n.sciName ? ' (' + n.sciName + ')' : '')) : (code || '');
+      document.getElementById('form-species-results').classList.remove('on');
+    }
+
+    function onSpeciesSearchInput() {
+      const q = (document.getElementById('form-species-search').value || '').trim().toLowerCase();
+      const box = document.getElementById('form-species-results');
+      if (!q) { box.classList.remove('on'); document.getElementById('form-species').value = ''; return; }
+      const hits = [];
+      const codes = Object.keys(DATA.T);
+      for (let i = 0; i < codes.length && hits.length < 25; i++) {
+        const n = taxName(codes[i]);
+        if (!isRealSpecies(codes[i])) continue;
+        if (nameMatches(n.comName, q) || nameMatches(n.sciName, q) || nameMatches(codes[i], q)) {
+          hits.push({ code: codes[i], ...n });
+        }
+      }
+      box.innerHTML = hits.length
+        ? hits.map(h => '<button type="button" onclick="setFormSpecies(\'' + h.code + '\')"><b>' + h.comName + '</b><div class="muted" style="font-style:italic">' + h.sciName + '</div></button>').join('')
+        : '<div class="hint" style="padding:8px">No matches</div>';
+      box.classList.add('on');
+    }
+
+    function resetCropper() {
+      crop.hasImage = false;
+      crop.dirty = false;
+      crop.fullDataUrl = null;
+      document.getElementById('cropper-container').style.display = 'none';
+      document.getElementById('crop-image').removeAttribute('src');
+      originalImageObj.removeAttribute('src');
+    }
+
+    function downscaleImage(src, maxEdge) {
+      return new Promise(resolve => {
+        const im = new Image();
+        im.onload = () => {
+          const w = im.naturalWidth, h = im.naturalHeight;
+          const scale = Math.min(1, maxEdge / Math.max(w, h));
+          if (scale >= 1 && src.slice(0, 5) === 'data:') { resolve(src); return; }
+          const c = document.createElement('canvas');
+          c.width = Math.max(1, Math.round(w * scale));
+          c.height = Math.max(1, Math.round(h * scale));
+          c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+          try { resolve(c.toDataURL('image/jpeg', 0.82)); }
+          catch (e) { resolve(src); }
+        };
+        im.onerror = () => resolve(src);
+        im.src = src;
+      });
+    }
+
+    function loadCropImage(src, markDirty, meta) {
+      originalImageObj.onload = () => {
+        document.getElementById('cropper-container').style.display = 'block';
+        document.getElementById('crop-image').src = originalImageObj.src;
+        crop.hasImage = true;
+        crop.dirty = !!markDirty;
+        requestAnimationFrame(() => {
+          fitCropCover();
+          if (meta) applyCropMeta(meta);
+        });
+      };
+      originalImageObj.onerror = () => {
+        document.getElementById('crop-hint').textContent = 'Could not load that image for recrop. Choose a new file.';
+      };
+      originalImageObj.src = src;
+    }
+
+    function handleImageSelection(e) {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = async ev => {
+        const full = await downscaleImage(ev.target.result, 1600);
+        crop.fullDataUrl = full;
+        loadCropImage(full, true);
+        document.getElementById('crop-hint').textContent = 'Drag to frame the bird. What you see in the square is what gets saved.';
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function fitCropCover() {
+      const vp = document.getElementById('crop-viewport');
+      if (!vp || !originalImageObj.naturalWidth) return;
+      const V = vp.clientWidth;
+      const W = originalImageObj.naturalWidth;
+      const H = originalImageObj.naturalHeight;
+      crop.vw = V;
+      crop.base = Math.max(V / W, V / H);
+      const zMin = Math.min(V / W, V / H) / crop.base;
+      crop.z = 1;
+      crop.ox = (V - W * crop.base) / 2;
+      crop.oy = (V - H * crop.base) / 2;
+      const slider = document.getElementById('crop-zoom');
+      slider.min = String(Math.max(0.2, zMin));
+      slider.max = '4';
+      slider.value = '1';
+      layoutCrop();
+    }
+
+    function applyCropMeta(meta) {
+      if (!meta || !originalImageObj.naturalWidth) return;
+      const V = crop.vw || document.getElementById('crop-viewport').clientWidth;
+      const k = V / (meta.vw || V);
+      crop.z = Math.max(parseFloat(document.getElementById('crop-zoom').min) || 0.2, Math.min(4, Number(meta.z) || 1));
+      crop.ox = Number(meta.ox || 0) * k;
+      crop.oy = Number(meta.oy || 0) * k;
+      document.getElementById('crop-zoom').value = String(crop.z);
+      clampCrop();
+      layoutCrop();
+    }
+
+    function getCropMeta() {
+      return { z: crop.z, ox: crop.ox, oy: crop.oy, vw: crop.vw };
+    }
+
+    function onCropZoom() {
+      if (!crop.hasImage) return;
+      const next = parseFloat(document.getElementById('crop-zoom').value) || 1;
+      const V = crop.vw || document.getElementById('crop-viewport').clientWidth;
+      const cx = V / 2, cy = V / 2;
+      const old = crop.base * crop.z;
+      const nx = (cx - crop.ox) / old;
+      const ny = (cy - crop.oy) / old;
+      crop.z = next;
+      const neu = crop.base * crop.z;
+      crop.ox = cx - nx * neu;
+      crop.oy = cy - ny * neu;
+      crop.dirty = true;
+      clampCrop();
+      layoutCrop();
+    }
+
+    function clampCrop() {
+      const V = crop.vw || document.getElementById('crop-viewport').clientWidth;
+      const dw = originalImageObj.naturalWidth * crop.base * crop.z;
+      const dh = originalImageObj.naturalHeight * crop.base * crop.z;
+      if (dw >= V) crop.ox = Math.min(0, Math.max(V - dw, crop.ox));
+      else crop.ox = (V - dw) / 2;
+      if (dh >= V) crop.oy = Math.min(0, Math.max(V - dh, crop.oy));
+      else crop.oy = (V - dh) / 2;
+    }
+
+    function layoutCrop() {
+      const img = document.getElementById('crop-image');
+      const dw = originalImageObj.naturalWidth * crop.base * crop.z;
+      const dh = originalImageObj.naturalHeight * crop.base * crop.z;
+      img.style.width = dw + 'px';
+      img.style.height = dh + 'px';
+      img.style.left = crop.ox + 'px';
+      img.style.top = crop.oy + 'px';
+    }
+
+    (function bindCrop() {
+      const vp = document.getElementById('crop-viewport');
+      const start = (x, y) => {
+        crop.dragging = true;
+        crop.startX = x; crop.startY = y;
+        crop.startOx = crop.ox; crop.startOy = crop.oy;
+      };
+      const move = (x, y) => {
+        if (!crop.dragging || !crop.hasImage) return;
+        crop.ox = crop.startOx + (x - crop.startX);
+        crop.oy = crop.startOy + (y - crop.startY);
+        crop.dirty = true;
+        clampCrop();
+        layoutCrop();
+      };
+      vp.addEventListener('mousedown', e => { e.preventDefault(); start(e.clientX, e.clientY); });
+      window.addEventListener('mousemove', e => move(e.clientX, e.clientY));
+      window.addEventListener('mouseup', () => { crop.dragging = false; });
+      vp.addEventListener('touchstart', e => { if (e.touches[0]) start(e.touches[0].clientX, e.touches[0].clientY); }, { passive: true });
+      window.addEventListener('touchmove', e => { if (e.touches[0]) move(e.touches[0].clientX, e.touches[0].clientY); }, { passive: true });
+      window.addEventListener('touchend', () => { crop.dragging = false; });
+    })();
+
+    function generateCroppedDataUrl() {
+      if (!crop.hasImage || !originalImageObj.naturalWidth) return null;
+      const V = crop.vw || document.getElementById('crop-viewport').clientWidth || 280;
+      const scale = crop.base * crop.z;
+      const sx = -crop.ox / scale;
+      const sy = -crop.oy / scale;
+      const sw = V / scale;
+      const sh = V / scale;
+      const out = 640;
+      const canvas = document.createElement('canvas');
+      canvas.width = out; canvas.height = out;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#0c0a09';
+      ctx.fillRect(0, 0, out, out);
+      try {
+        ctx.drawImage(originalImageObj, sx, sy, sw, sh, 0, 0, out, out);
+        return canvas.toDataURL('image/jpeg', 0.86);
+      } catch (e) {
+        return originalImageObj.src || null;
+      }
+    }
+
+    function placeNameFromGeo(data) {
+      if (!data) return '';
+      const asCounty = (n) => {
+        if (!n) return '';
+        return /county$/i.test(n) ? n : n + ' County';
+      };
+      const admin = (data.localityInfo && data.localityInfo.administrative) || [];
+      for (let i = 0; i < admin.length; i++) {
+        const row = admin[i] || {};
+        const desc = String(row.description || row.isoName || '').toLowerCase();
+        const name = row.name || '';
+        if (/county/.test(desc) || /county$/i.test(name)) return asCounty(name);
+      }
+      if (data.principalSubdivisionSecondLevel) return asCounty(data.principalSubdivisionSecondLevel);
+      return '';
+    }
+
+    function setLocMode(mode) {
+      const gps = document.getElementById('btn-use-gps');
+      const map = document.getElementById('btn-pick-map');
+      if (gps) gps.className = mode === 'gps' ? 'btn-em' : 'ghost';
+      if (map) map.className = mode === 'map' ? 'btn-em' : 'ghost';
+    }
+
+    async function reverseFillLocation(lat, lng) {
+      try {
+        const res = await fetch('https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=' + lat + '&longitude=' + lng + '&localityLanguage=en');
+        const data = await res.json();
+        const name = placeNameFromGeo(data);
+        document.getElementById('form-location').value = name || 'Field Observation';
+        if (data && data.principalSubdivision) document.getElementById('form-state').value = data.principalSubdivision;
+      } catch (e) {
+        const el = document.getElementById('form-location');
+        if (el && !el.value) el.value = 'Field Observation';
+      }
+    }
+
+    function ensurePickerMap() {
+      const drawer = document.getElementById('picker-map-drawer');
+      drawer.style.display = 'block';
+      if (!pickerMap) {
+        pickerMap = L.map('picker-map', { zoomControl: false, preferCanvas: true }).setView([selectedCoords.lat, selectedCoords.lng], 13);
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18 }).addTo(pickerMap);
+        pickerMarker = L.marker([selectedCoords.lat, selectedCoords.lng], { draggable: true }).addTo(pickerMap);
+        pickerMarker.on('dragend', e => setFormCoordinates(e.target.getLatLng().lat, e.target.getLatLng().lng));
+        pickerMap.on('click', e => setFormCoordinates(e.latlng.lat, e.latlng.lng));
+      }
+      setTimeout(() => pickerMap && pickerMap.invalidateSize(), 120);
+    }
+
+    function fetchGPSLocation() {
+      if (!navigator.geolocation) return;
+      setLocMode('gps');
+      navigator.geolocation.getCurrentPosition(pos => {
+        ensurePickerMap();
+        setFormCoordinates(pos.coords.latitude, pos.coords.longitude);
+      }, () => {}, { enableHighAccuracy: true, timeout: 8000 });
+    }
+
+    function setFormCoordinates(lat, lng, fillName) {
+      selectedCoords = { lat, lng };
+      if (pickerMap && pickerMarker) {
+        pickerMarker.setLatLng([lat, lng]);
+        pickerMap.setView([lat, lng], Math.max(pickerMap.getZoom() || 13, 14));
+      }
+      if (fillName !== false) reverseFillLocation(lat, lng);
+    }
+
+    function togglePickerMap() {
+      const drawer = document.getElementById('picker-map-drawer');
+      const hide = drawer.style.display !== 'none';
+      if (hide) {
+        drawer.style.display = 'none';
+        setLocMode('');
+        return;
+      }
+      setLocMode('map');
+      ensurePickerMap();
+    }
+
+    function toggleFormCover() {
+      const box = document.getElementById('form-is-cover');
+      box.checked = !box.checked;
+      const btn = document.getElementById('btn-form-cover');
+      if (btn) {
+        btn.textContent = box.checked ? 'Cover photo' : 'Set as cover photo';
+        btn.className = box.checked ? 'btn-em' : 'ghost';
+      }
+    }
+
+    function syncFormCoverButton() {
+      const box = document.getElementById('form-is-cover');
+      const btn = document.getElementById('btn-form-cover');
+      if (!btn || !box) return;
+      btn.textContent = box.checked ? 'Cover photo' : 'Set as cover photo';
+      btn.className = box.checked ? 'btn-em' : 'ghost';
+    }
+
+    function saveSightingRecord() {
+      const speciesCode = document.getElementById('form-species').value;
+      if (!speciesCode) { alert('Pick a species from the search results first.'); return; }
+      const cropped = (crop.hasImage && (crop.dirty || !editingId)) ? generateCroppedDataUrl() : null;
+      const isCover = document.getElementById('form-is-cover').checked ? 1 : 0;
+      if (isCover) sightings.forEach(s => { if (s.species_code === speciesCode) s.is_cover = 0; });
+      const payload = {
+        species_code: speciesCode,
+        date: document.getElementById('form-date').value || new Date().toISOString().slice(0,10),
+        lat: selectedCoords.lat, lng: selectedCoords.lng,
+        location_name: document.getElementById('form-location').value || 'Field Observation',
+        state: document.getElementById('form-state').value || activeState,
+        country: 'United States',
+        notes: document.getElementById('form-notes').value,
+        is_cover: isCover
+      };
+      if (editingId) {
+        const row = sightings.find(s => s.id === editingId);
+        if (row) {
+          Object.assign(row, payload);
+          if (crop.fullDataUrl) row.photo_full = crop.fullDataUrl;
+          if (cropped) row.photo_url = cropped;
+          if (!row.photo_full && row.photo_url) row.photo_full = row.photo_url;
+          if (crop.hasImage) row.crop_meta = getCropMeta();
+        }
+      } else {
+        sightings.push(Object.assign({
+          id: 's_' + Date.now(),
+          photo_url: cropped || '',
+          photo_full: crop.fullDataUrl || cropped || '',
+          crop_meta: crop.hasImage ? getCropMeta() : null
+        }, payload));
+      }
+      persistSightings();
+      closeUploadModal();
+      refreshUI();
+      renderLifeList();
+      renderGallery();
+      renderRadar();
+    }
+
+    function openUploadModal() {
+      editingId = null;
+      document.getElementById('upload-title').textContent = 'Log Sighting';
+      document.getElementById('btn-delete-sighting').style.display = 'none';
+      document.getElementById('form-date').value = new Date().toISOString().slice(0,10);
+      document.getElementById('form-notes').value = '';
+      document.getElementById('form-is-cover').checked = false;
+      syncFormCoverButton();
+      setLocMode('');
+      document.getElementById('form-file').value = '';
+      resetCropper();
+      document.getElementById('upload-modal').classList.add('on');
+    }
+    function closeUploadModal() {
+      editingId = null;
+      document.getElementById('upload-title').textContent = 'Log Sighting';
+      document.getElementById('btn-delete-sighting').style.display = 'none';
+      document.getElementById('upload-modal').classList.remove('on');
+      document.getElementById('picker-map-drawer').style.display = 'none';
+      resetCropper();
+    }
+
+    function switchTab(tab) {
+      ['map','lifelist','gallery','radar'].forEach(t => {
+        document.getElementById('view-' + t).classList.toggle('on', t === tab);
+        document.getElementById('nav-btn-' + t).classList.toggle('on', t === tab);
+      });
+      if (tab === 'map' && mapInstance) setTimeout(() => mapInstance.invalidateSize(), 100);
+      if (tab === 'lifelist') renderLifeList();
+      if (tab === 'gallery') renderGallery();
+      if (tab === 'radar') renderRadar();
+    }
+
+    function populateFilterDropdowns() {
+      const codes = [...new Set(sightings.map(s => s.species_code))];
+      const opts = ['<option value="all">All Species</option>'].concat(codes.map(c => '<option value="' + c + '">' + taxName(c).comName + '</option>'));
+      document.getElementById('gallery-species-filter').innerHTML = opts.join('');
+    }
+
+    function refreshUI() {
+      populateFilterDropdowns();
+      renderMapMarkers();
+      updateRegionalHUD();
+      persistSightings();
+    }
+
+    async function loadData() {
+      try {
+        const res = await fetch('./avian_ebird_data.json');
+        if (!res.ok) throw new Error('missing json');
+        const json = await res.json();
+        DATA.L = json.L || [];
+        DATA.T = json.T || {};
+        DATA.S = json.S || {};
+        stateCache.clear();
+      } catch (e) {}
+    }
+
+    window.addEventListener('DOMContentLoaded', async () => {
+      const btn = document.getElementById('map-species-btn');
+      const search = document.getElementById('map-species-search');
+      if (btn) btn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); toggleMapSpeciesList(); });
+      if (search) search.addEventListener('input', filterMapSpeciesList);
+      document.addEventListener('click', (e) => {
+        const box = document.getElementById('map-species-box');
+        const results = document.getElementById('map-species-results');
+        if (!box || !results || !results.classList.contains('on')) return;
+        if (!box.contains(e.target) && !results.contains(e.target)) results.classList.remove('on');
+      });
+      const idbRows = await loadSightingsFromIDB();
+      if (Array.isArray(idbRows) && idbRows.length) {
+        sightings.length = 0;
+        idbRows.forEach(s => sightings.push(s));
+        ensureFullPhotos();
+      } else {
+        seedSightings();
+      }
+      initMap();
+      refreshUI();
+      await loadData();
+      refreshUI();
+    });
+  </script>
+</body>
+</html>
