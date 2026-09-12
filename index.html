@@ -64,7 +64,28 @@
     .hud-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
     .hud-label { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #34d399; }
     .row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
-    #region-label { background: none; border: 0; color: #f5f5f4; font-weight: 700; font-size: 13px; text-decoration: underline dotted #78716c; max-width: 70%; text-align: left; }
+    #region-label { background: none; border: 0; color: #f5f5f4; font-weight: 700; font-size: 13px; text-decoration: underline dotted #78716c; max-width: 58%; text-align: left; }
+    .lock-btn {
+      width: 28px; height: 28px; padding: 0; flex: none;
+      background: transparent; border: 0; color: #57534e;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .lock-btn svg { width: 16px; height: 16px; display: block; }
+    .lock-btn.on { color: #34d399; }
+    .leaflet-popup.cycle-pop .leaflet-popup-content-wrapper { border-radius: 14px; }
+    .leaflet-popup-content { margin: 8px 10px 8px; min-width: 0 !important; }
+    .leaflet-popup-content-wrapper { padding: 0; }
+    .pop-card { width: 220px; font-size: 12px; line-height: 1.25; text-align: left; }
+    .pop-card-top { display: flex; align-items: center; gap: 6px; }
+    .pop-card-top b { font-size: 13px; line-height: 1.2; }
+    .pop-card-top .chip { flex: none; margin: 0; }
+    .pop-card .muted { margin-top: 2px; font-size: 11px; }
+    .pop-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 6px; }
+    .pop-row .spark { margin: 0; width: auto; justify-content: flex-start; }
+    .pop-pager { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 6px; color: #a8a29e; font-size: 11px; font-weight: 700; }
+    .pop-pager button { background: none; border: 0; color: #e7e5e4; font-size: 16px; line-height: 1; padding: 2px 6px; cursor: pointer; }
+    .chit-focus { filter: drop-shadow(0 0 0 2px #0c0a09) drop-shadow(0 0 0 4px #34d399); }
+    .chit-focus.leaflet-interactive { stroke: #34d399; stroke-width: 3; }
     #region-stats { font-family: ui-monospace, monospace; color: #34d399; font-weight: 700; font-size: 12px; }
     .bar { height: 4px; background: #292524; border-radius: 99px; overflow: hidden; margin-top: 6px; }
     .bar > div { height: 100%; width: 0; background: #10b981; }
@@ -337,6 +358,7 @@
       </div>
       <div class="hud">
         <div class="hud-compact">
+          <button type="button" class="lock-btn" id="btn-state-lock" title="Lock state" onclick="toggleStateLock()" aria-label="Lock state"></button>
           <button id="region-label" onclick="openRegionSpeciesModal()">North Carolina</button>
           <span id="region-stats">0 / 0</span>
           <div class="seg">
@@ -608,6 +630,14 @@
         </div>
         <p class="hint">Get a key at ebird.org/api/keygen</p>
         <div class="field" style="margin-top:14px">
+          <label>Stats mode</label>
+          <div class="seg">
+            <button type="button" id="btn-stats-state" class="on" onclick="setStatsMode('state')">State</button>
+            <button type="button" id="btn-stats-country" onclick="setStatsMode('country')">Country</button>
+          </div>
+          <p class="hint">State: a lifer counts only in the state where you logged it. Country: a bird logged anywhere in the US counts as logged on every state’s checklist and targets. Gallery is unchanged.</p>
+        </div>
+        <div class="field" style="margin-top:14px">
           <label>Map tiles</label>
           <div class="seg">
             <button type="button" id="btn-tiles-light" class="on" onclick="setDarkTiles(false)">Light</button>
@@ -618,6 +648,7 @@
           <button class="ghost" type="button" onclick="exportLogs()">Export logs</button>
           <button class="ghost" type="button" onclick="document.getElementById('import-logs').click()">Import logs</button>
         </div>
+        <p class="hint" id="last-export-stamp" style="margin-top:8px">No export yet</p>
       </div>
       <div class="sheet-f">
         <button class="btn-em" style="width:100%" onclick="saveEbirdKey()">Save key</button>
@@ -659,6 +690,10 @@
     ];
 
     let currentRegionLevel = 'state';
+    let statsMode = localStorage.getItem('avian_stats_mode') || 'state';
+    let stateLocked = localStorage.getItem('avian_state_lock') === '1';
+    let clusterPeers = [];
+    let clusterFocus = null;
     let activeState = 'North Carolina';
     const STATE_BOUNDS = {
       'Alabama':[-88.47,30.22,-84.89,35.01],'Alaska':[-179.15,51.21,-129.98,71.39],'Arizona':[-114.82,31.33,-109.04,37.00],
@@ -867,7 +902,11 @@
     }
 
     function exportLogs() {
-      const blob = new Blob([JSON.stringify({ version: 1, saved: new Date().toISOString(), sightings }, null, 2)], { type: 'application/json' });
+      const when = new Date().toISOString();
+      localStorage.setItem('avian_last_export', when);
+      const stamp = document.getElementById('last-export-stamp');
+      if (stamp) stamp.textContent = 'Last export: ' + new Date(when).toLocaleString();
+      const blob = new Blob([JSON.stringify({ version: 1, saved: when, sightings }, null, 2)], { type: 'application/json' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       a.download = 'birdseye-logs.json';
@@ -958,6 +997,8 @@
       const clusterOpts = { showCoverageOnHover: false, maxClusterRadius: 32, spiderfyOnMaxZoom: true, disableClusteringAtZoom: 18, iconCreateFunction: rarityClusterIcon };
       markersLayer = L.markerClusterGroup(clusterOpts).addTo(mapInstance);
       huntLayer = L.markerClusterGroup(clusterOpts).addTo(mapInstance);
+      bindClusterGroup(markersLayer);
+      bindClusterGroup(huntLayer);
       const range = document.getElementById('heat-range');
       if (range) range.value = String(CURRENT_MONTH);
       mapInstance.on('zoomend', scheduleMarkers);
@@ -1012,26 +1053,19 @@
 
     function stateFromMapView() {
       if (!mapInstance) return activeState;
-      const b = mapInstance.getBounds();
-      const view = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
       const c = mapInstance.getCenter();
       const dc = STATE_BOUNDS['District of Columbia'];
       if (dc && pointInBox(c.lat, c.lng, dc)) return 'District of Columbia';
-      let centerHit = '';
+      let hit = '';
       Object.keys(STATE_BOUNDS).forEach(name => {
         if (name === 'District of Columbia') return;
-        if (pointInBox(c.lat, c.lng, STATE_BOUNDS[name])) centerHit = name;
+        if (pointInBox(c.lat, c.lng, STATE_BOUNDS[name])) hit = name;
       });
-      let best = centerHit || '', bestArea = centerHit ? boxIntersectArea(view, STATE_BOUNDS[centerHit]) : 0;
-      Object.keys(STATE_BOUNDS).forEach(name => {
-        if (name === 'District of Columbia') return;
-        const area = boxIntersectArea(view, STATE_BOUNDS[name]);
-        if (area > bestArea * 1.12) { best = name; bestArea = area; }
-      });
-      return best || activeState;
+      return hit || activeState;
     }
 
     function applyViewState() {
+      if (stateLocked) return false;
       const next = stateFromMapView();
       if (!next || next === activeState) return false;
       activeState = next;
@@ -1115,8 +1149,17 @@
       setLocMode('map');
     }
 
+    function refreshExportStamp() {
+      const el = document.getElementById('last-export-stamp');
+      if (!el) return;
+      const raw = localStorage.getItem('avian_last_export');
+      el.textContent = raw ? ('Last export: ' + new Date(raw).toLocaleString()) : 'No export yet';
+    }
+
     function openKeyModal() {
       document.getElementById('form-ebird-key').value = getEbirdKey();
+      refreshExportStamp();
+      setStatsMode(statsMode);
       applyMapTiles();
       document.getElementById('key-modal').classList.add('on');
     }
@@ -1148,9 +1191,145 @@
     }
 
     function lifeCodes() {
-      const set = new Set();
-      for (let i = 0; i < sightings.length; i++) set.add(sightings[i].species_code);
-      return set;
+      return loggedCodesFor(activeState, statsMode === 'country');
+    }
+
+    function setStatsMode(mode) {
+      statsMode = mode === 'country' ? 'country' : 'state';
+      localStorage.setItem('avian_stats_mode', statsMode);
+      const st = document.getElementById('btn-stats-state');
+      const co = document.getElementById('btn-stats-country');
+      if (st) st.className = statsMode === 'state' ? 'on' : '';
+      if (co) co.className = statsMode === 'country' ? 'on' : '';
+      updateRegionalHUD();
+      renderRadar();
+      const modal = document.getElementById('region-species-modal');
+      if (modal && modal.classList.contains('on')) renderChecklistViews();
+      if (mapMode === 'hunt') renderHuntMap();
+    }
+
+    function toggleStateLock() {
+      stateLocked = !stateLocked;
+      localStorage.setItem('avian_state_lock', stateLocked ? '1' : '0');
+      syncStateLockBtn();
+    }
+
+    function syncStateLockBtn() {
+      const btn = document.getElementById('btn-state-lock');
+      if (!btn) return;
+      btn.className = 'lock-btn' + (stateLocked ? ' on' : '');
+      btn.title = stateLocked ? 'Unlock state' : 'Lock state';
+      btn.setAttribute('aria-label', btn.title);
+      btn.innerHTML = stateLocked
+        ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>'
+        : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 7.5-2"/></svg>';
+    }
+
+    function peersForMarker(marker) {
+      if (clusterPeers && clusterPeers.indexOf(marker) >= 0 && clusterPeers.length > 1) return clusterPeers.slice();
+      if (!marker || !marker.getLatLng) return marker ? [marker] : [];
+      const ll = marker.getLatLng();
+      const out = [];
+      [markersLayer, huntLayer].forEach(g => {
+        if (!g) return;
+        g.eachLayer(m => {
+          if (!m.getLatLng) return;
+          const p = m.getLatLng();
+          if (Math.abs(p.lat - ll.lat) < 0.0002 && Math.abs(p.lng - ll.lng) < 0.0002) out.push(m);
+        });
+      });
+      return out.length ? out : [marker];
+    }
+
+    function clearChitFocus() {
+      document.querySelectorAll('.chit-focus').forEach(el => el.classList.remove('chit-focus'));
+    }
+
+    function highlightCycleMarker(marker) {
+      clearChitFocus();
+      if (!marker) return;
+      const el = marker.getElement && marker.getElement();
+      if (el) el.classList.add('chit-focus');
+    }
+
+    function clusterCardAnchor(peers) {
+      let best = null;
+      peers.forEach(m => {
+        const p = m.getLatLng && m.getLatLng();
+        if (!p) return;
+        if (!best || p.lat > best.lat) best = p;
+      });
+      return best || mapInstance.getCenter();
+    }
+
+    function cycleCardHTML(inner, index, total) {
+      const pager = total > 1
+        ? '<div class="pop-pager"><button type="button" class="pop-prev" data-cycle="-1">‹</button><span>' + (index + 1) + ' / ' + total + '</span><button type="button" class="pop-next" data-cycle="1">›</button></div>'
+        : '';
+      return '<div class="pop-card">' + inner + pager + '</div>';
+    }
+
+    let cyclePopup = null;
+
+    function closeFixedCycle() {
+      if (cyclePopup && mapInstance) mapInstance.closePopup(cyclePopup);
+      clearChitFocus();
+    }
+
+    function openFixedCycle(peers, index, keepPlace) {
+      if (!peers.length) return;
+      index = (index + peers.length) % peers.length;
+      clusterFocus = peers[index];
+      clusterPeers = peers;
+      highlightCycleMarker(clusterFocus);
+      const inner = clusterFocus._beCard || '';
+      const html = cycleCardHTML(inner, index, peers.length);
+      if (!cyclePopup) {
+        cyclePopup = L.popup({ autoPan: false, closeButton: true, className: 'cycle-pop', maxWidth: 260, offset: [0, -18] });
+        cyclePopup.on('remove', function () { clearChitFocus(); });
+      }
+      const here = (keepPlace && cyclePopup.getLatLng()) ? cyclePopup.getLatLng() : clusterCardAnchor(peers);
+      cyclePopup.setLatLng(here).setContent(html).openOn(mapInstance);
+      const root = cyclePopup.getElement();
+      if (root) {
+        L.DomEvent.disableClickPropagation(root);
+        root.querySelectorAll('[data-cycle]').forEach(btn => {
+          L.DomEvent.on(btn, 'mousedown', L.DomEvent.stop);
+          L.DomEvent.on(btn, 'click', function (ev) {
+            L.DomEvent.stop(ev);
+            cycleClusterPopup(Number(btn.getAttribute('data-cycle')));
+          });
+        });
+        const go = root.querySelector('.popup-open');
+        if (go && go.dataset.sid) {
+          go.onclick = function (ev) { ev.preventDefault(); openSightingFromMap(go.dataset.sid); };
+        }
+      }
+    }
+
+    function noteClusterPopup(marker) {
+      const peers = peersForMarker(marker);
+      if (peers.length > 1) {
+        if (marker.closePopup) marker.closePopup();
+        openFixedCycle(peers, Math.max(0, peers.indexOf(marker)), !!(cyclePopup && mapInstance && mapInstance.hasLayer(cyclePopup)));
+        return;
+      }
+      clusterFocus = marker;
+      highlightCycleMarker(marker);
+    }
+
+    function cycleClusterPopup(dir) {
+      if (!clusterPeers.length && clusterFocus) clusterPeers = peersForMarker(clusterFocus);
+      if (clusterPeers.length < 2) return;
+      let i = clusterPeers.indexOf(clusterFocus);
+      if (i < 0) i = 0;
+      openFixedCycle(clusterPeers, i + dir, true);
+    }
+
+    function bindClusterGroup(group) {
+      if (!group) return;
+      group.on('spiderfied', function (e) { clusterPeers = e.markers || []; });
+      group.on('unspiderfied', function () { clusterPeers = []; closeFixedCycle(); });
     }
 
     function speciesFromState(code) {
@@ -1776,7 +1955,9 @@
         const mk = L.marker([h.lat, h.lng], {
           icon: L.divIcon({ className: 'hotspot-chit', html: '', iconSize: [12, 12], iconAnchor: [6, 6] })
         });
-        mk.bindPopup('<div style="min-width:140px;font-size:12px"><b>' + (h.locName || 'Hotspot') + '</b><div class="muted">' + (h.numSpeciesAllTime || '') + ' species all-time</div></div>');
+        mk._beCard = '<div class="pop-card-top"><b>' + (h.locName || 'Hotspot') + '</b></div><div class="muted">' + (h.numSpeciesAllTime || '') + ' species all-time</div>';
+        mk.bindPopup(cycleCardHTML(mk._beCard, 0, 1));
+        mk.on('popupopen', function () { noteClusterPopup(mk); });
         huntLayer.addLayer(mk);
       }
       const obs = showBirds ? (huntCache.obs || []) : [];
@@ -1801,16 +1982,14 @@
           })
         });
         const sp = speciesFromState(code);
-        mk.bindPopup(
-          '<div style="min-width:160px;font-size:12px"><b>' + name + '</b>' +
-          (have.has(code) ? ' <span class="chip y">Logged</span>' : ' <span class="chip s">Needed</span>') +
-          '<div class="muted">' + (o.locName || '') + '<br>' + (o.obsDt || '') + '</div>' +
-          sparkHTML(sp.monthly) +
-          '<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">' +
-          (have.has(code) ? '' : '<button class="btn-em" onclick="openUploadModal();setFormSpecies(\'' + code + '\')">Log</button>') +
-          '<a class="merlin-link" href="https://merlinbirds.org/species/' + encodeURIComponent(code) + '" target="_blank" rel="noopener">Merlin ↗</a></div>' +
-          '</div>'
-        );
+        mk._beCard =
+          '<div class="pop-card-top"><b>' + name + '</b>' +
+          (have.has(code) ? '<span class="chip y">Logged</span>' : '<span class="chip s">Needed</span>') + '</div>' +
+          '<div class="muted">' + (o.locName || '') + (o.obsDt ? ' · ' + o.obsDt : '') + '</div>' +
+          '<div class="pop-row">' + sparkHTML(sp.monthly) +
+          '<a class="merlin-link" href="https://merlinbirds.org/species/' + encodeURIComponent(code) + '" target="_blank" rel="noopener">Merlin ↗</a></div>';
+        mk.bindPopup(cycleCardHTML(mk._beCard, 0, 1));
+        mk.on('popupopen', function () { noteClusterPopup(mk); });
         huntLayer.addLayer(mk);
       }
       refreshHuntStatusCounts();
@@ -1823,7 +2002,7 @@
       try {
         const res = await fetch('https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=' + c.lat + '&longitude=' + c.lng + '&localityLanguage=en');
         const data = await res.json();
-        if (data && data.countryCode === 'US' && data.principalSubdivision && STATE_CODES[data.principalSubdivision]) {
+        if (!stateLocked && data && data.countryCode === 'US' && data.principalSubdivision && STATE_CODES[data.principalSubdivision]) {
           if (data.principalSubdivision !== activeState) {
             const viewGuess = stateFromMapView();
             if (viewGuess === data.principalSubdivision || !viewGuess) {
@@ -1878,7 +2057,7 @@
       const entry = decodeState(code);
       const realList = entry.list.filter(sp => isRealSpecies(sp.code));
       const total = realList.length || 0;
-      const logged = loggedCodesFor(activeState, isCountry);
+      const logged = loggedCodesFor(activeState, isCountry || statsMode === 'country');
       let count = 0;
       logged.forEach(c => { if (isRealSpecies(c)) count++; });
       const pct = total ? ((count / total) * 100).toFixed(1) : '0.0';
@@ -2026,9 +2205,10 @@
 
     function loggedCodesForWindow(stateName, countryOnly) {
       const set = new Set();
+      const useCountry = countryOnly || statsMode === 'country';
       for (let i = 0; i < sightings.length; i++) {
         const s = sightings[i];
-        const locOk = countryOnly ? s.country === 'United States' : ((s.state || '').toLowerCase() === (stateName || '').toLowerCase());
+        const locOk = useCountry ? s.country === 'United States' : ((s.state || '').toLowerCase() === (stateName || '').toLowerCase());
         if (!locOk || !inCheckWindow(s.date)) continue;
         set.add(s.species_code);
       }
@@ -2166,18 +2346,19 @@
           });
         }
         const sid = s.id;
-        marker.bindPopup(
+        marker._beCard =
           '<div class="popup-open" data-sid="' + sid + '">' +
           (s.photo_url ? '<img src="' + s.photo_url + '" alt="" />' : '') +
-          '<b>' + name + '</b><div class="muted">📍 ' + placeLabel(s) + '<br>📅 ' + s.date + '</div>' +
-          '<div class="hint" style="margin-top:6px">Tap for details</div></div>',
-          { closeButton: true, autoPan: true }
-        );
+          '<div class="pop-card-top"><b>' + name + '</b></div>' +
+          '<div class="muted">' + placeLabel(s) + ' · ' + s.date + '</div>' +
+          '<div class="hint" style="margin-top:4px;text-align:center">Tap for details</div></div>';
+        marker.bindPopup(cycleCardHTML(marker._beCard, 0, 1), { closeButton: true, autoPan: true });
         marker.on('popupopen', function (e) {
+          noteClusterPopup(marker);
           const root = e.popup.getElement();
           if (!root) return;
           const go = function (ev) {
-            if (ev.target && ev.target.classList && ev.target.classList.contains('leaflet-popup-close-button')) return;
+            if (ev.target && ev.target.classList && (ev.target.classList.contains('leaflet-popup-close-button') || ev.target.classList.contains('pop-arrow'))) return;
             L.DomEvent.stop(ev);
             openSightingFromMap(sid);
           };
@@ -3223,6 +3404,7 @@
         seedSightings();
       }
       initMap();
+      syncStateLockBtn();
       applyViewState();
       refreshUI();
       await loadData();
