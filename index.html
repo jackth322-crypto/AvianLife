@@ -1100,38 +1100,35 @@
     }
 
 function exportLogs() {
+  const when = new Date().toISOString();
+  
+  // Safely attempt to update export markers without crashing if storage is full
   try {
-    const when = new Date().toISOString();
-    
-    // 1. Update save markers
     localStorage.setItem('avian_last_export', when);
     localStorage.setItem('avian_exported_ids', JSON.stringify(sightings.map(s => s.id)));
-    refreshExportStamp();
-
-    // 2. Package the data
-    const fileData = JSON.stringify({ version: 1, saved: when, sightings }, null, 2);
-    const blob = new Blob([fileData], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    
-    // 3. Trigger standard download
-    const a = document.createElement('a');
-    a.style.display = 'none';
-    a.href = url;
-    a.download = 'birdseye-logs.json';
-    
-    document.body.appendChild(a);
-    a.click();
-    
-    // 4. Cleanup
-    setTimeout(() => {
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    }, 3000);
-
-  } catch (error) {
-    // Force the browser to show us the silent error!
-    alert("Export failed: " + error.message);
+  } catch (err) {
+    console.warn("Storage full, skipping timestamp save. Proceeding with export.");
   }
+  
+  refreshExportStamp();
+
+  // Package the data and force the download
+  const fileData = JSON.stringify({ version: 1, saved: when, sightings }, null, 2);
+  const blob = new Blob([fileData], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  
+  const a = document.createElement('a');
+  a.style.display = 'none';
+  a.href = url;
+  a.download = 'birdseye-logs.json';
+  
+  document.body.appendChild(a);
+  a.click();
+  
+  setTimeout(() => {
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, 3000);
 }
 
     function importLogs(ev) {
