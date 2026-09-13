@@ -1099,18 +1099,45 @@
       return n;
     }
 
-    function exportLogs() {
-      const when = new Date().toISOString();
-      localStorage.setItem('avian_last_export', when);
-      localStorage.setItem('avian_exported_ids', JSON.stringify(sightings.map(s => s.id)));
-      refreshExportStamp();
-      const blob = new Blob([JSON.stringify({ version: 1, saved: when, sightings }, null, 2)], { type: 'application/json' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = 'birdseye-logs.json';
-      a.click();
-      URL.revokeObjectURL(a.href);
+async function exportLogs() {
+  const when = new Date().toISOString();
+  localStorage.setItem('avian_last_export', when);
+  localStorage.setItem('avian_exported_ids', JSON.stringify(sightings.map(s => s.id)));
+  refreshExportStamp();
+
+  const fileData = JSON.stringify({ version: 1, saved: when, sightings }, null, 2);
+  const blob = new Blob([fileData], { type: 'application/json' });
+  const fileName = 'birdseye-logs.json';
+
+  // Mobile Web Share API: Lets mobile users share or "Save to Files" natively
+  if (navigator.canShare && navigator.canShare({ files: [new File([blob], fileName, { type: 'application/json' })] })) {
+    try {
+      const file = new File([blob], fileName, { type: 'application/json' });
+      await navigator.share({
+        files: [file],
+        title: 'BirdsEye Logs Backup'
+      });
+      return;
+    } catch (err) {
+      if (err.name !== 'AbortError') console.error('Share failed:', err);
     }
+  }
+
+  // Fallback for standard mobile/desktop browsers
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.style.display = 'none';
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+
+  // Allow mobile download managers time to register before revoking
+  setTimeout(() => {
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, 2000);
+}
 
     function importLogs(ev) {
       const file = ev.target.files && ev.target.files[0];
