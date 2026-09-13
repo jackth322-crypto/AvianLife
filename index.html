@@ -1099,7 +1099,7 @@
       return n;
     }
 
-async function exportLogs() {
+function exportLogs() {
   const when = new Date().toISOString();
   localStorage.setItem('avian_last_export', when);
   localStorage.setItem('avian_exported_ids', JSON.stringify(sightings.map(s => s.id)));
@@ -1109,30 +1109,19 @@ async function exportLogs() {
   const blob = new Blob([fileData], { type: 'application/json' });
   const fileName = 'birdseye-logs.json';
 
-  // Mobile Web Share API: Lets mobile users share or "Save to Files" natively
-  if (navigator.canShare && navigator.canShare({ files: [new File([blob], fileName, { type: 'application/json' })] })) {
-    try {
-      const file = new File([blob], fileName, { type: 'application/json' });
-      await navigator.share({
-        files: [file],
-        title: 'BirdsEye Logs Backup'
-      });
-      return;
-    } catch (err) {
-      if (err.name !== 'AbortError') console.error('Share failed:', err);
-    }
-  }
-
-  // Fallback for standard mobile/desktop browsers
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.style.display = 'none';
+  
+  // Use visibility/positioning instead of display:none to bypass Safari's click blocking
+  a.style.position = 'absolute';
+  a.style.visibility = 'hidden';
   a.href = url;
   a.download = fileName;
+  
   document.body.appendChild(a);
   a.click();
 
-  // Allow mobile download managers time to register before revoking
+  // Clean up after giving the mobile OS enough time to grab the file
   setTimeout(() => {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
