@@ -1101,18 +1101,31 @@
 
 function exportLogs() {
   const when = new Date().toISOString();
+  const exportedIds = JSON.stringify(sightings.map(s => s.id));
   
-  // Safely attempt to update export markers without crashing if storage is full
+  // 1. Try to save the markers, clearing the temporary heatmap cache if space is needed
   try {
     localStorage.setItem('avian_last_export', when);
-    localStorage.setItem('avian_exported_ids', JSON.stringify(sightings.map(s => s.id)));
+    localStorage.setItem('avian_exported_ids', exportedIds);
   } catch (err) {
-    console.warn("Storage full, skipping timestamp save. Proceeding with export.");
+    localStorage.removeItem('avian_heat_cache_v3');
+    try {
+      localStorage.setItem('avian_last_export', when);
+      localStorage.setItem('avian_exported_ids', exportedIds);
+    } catch (err2) {
+      console.warn("Storage deadlocked. Proceeding with export anyway.");
+    }
   }
   
   refreshExportStamp();
 
-  // Package the data and force the download
+  // 2. Force the UI to show "0 logs" for this session if storage is completely blocked
+  const el = document.getElementById('last-export-stamp');
+  if (el && !el.textContent.includes('0 logs')) {
+    el.textContent = 'Last export: ' + new Date(when).toLocaleString() + ' · 0 logs since last export';
+  }
+
+  // 3. Package the data and force the download
   const fileData = JSON.stringify({ version: 1, saved: when, sightings }, null, 2);
   const blob = new Blob([fileData], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
