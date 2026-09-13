@@ -1099,20 +1099,34 @@
       return n;
     }
 
-function exportLogs() {
+async function exportLogs() {
   const when = new Date().toISOString();
   localStorage.setItem('avian_last_export', when);
   localStorage.setItem('avian_exported_ids', JSON.stringify(sightings.map(s => s.id)));
   refreshExportStamp();
 
   const fileData = JSON.stringify({ version: 1, saved: when, sightings }, null, 2);
-  const blob = new Blob([fileData], { type: 'application/json' });
   const fileName = 'birdseye-logs.json';
 
+  // TRICK 1: Bypass mobile Share Sheet restrictions by declaring the file as plain text
+  try {
+    const file = new File([fileData], fileName, { type: 'text/plain' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({
+        files: [file],
+        title: 'BirdsEye Logs Backup'
+      });
+      return;
+    }
+  } catch (err) {
+    console.warn('Share API failed:', err);
+  }
+
+  // TRICK 2: Force a download by declaring a generic binary stream
+  const blob = new Blob([fileData], { type: 'application/octet-stream' }); 
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   
-  // Use visibility/positioning instead of display:none to bypass Safari's click blocking
   a.style.position = 'absolute';
   a.style.visibility = 'hidden';
   a.href = url;
@@ -1120,8 +1134,7 @@ function exportLogs() {
   
   document.body.appendChild(a);
   a.click();
-
-  // Clean up after giving the mobile OS enough time to grab the file
+  
   setTimeout(() => {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
