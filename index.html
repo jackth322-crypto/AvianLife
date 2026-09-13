@@ -28,7 +28,9 @@
     .nav-btn.on { color: #34d399; }
     .view { position: absolute; inset: 0; display: none; }
     .view.on { display: block; }
-    #view-map.on { display: block; }
+    /* Keep the Leaflet map sized while other tabs are open so fitBounds can run. */
+    #view-map { display: block !important; visibility: hidden; pointer-events: none; z-index: 0; }
+    #view-map.on { visibility: visible; pointer-events: auto; z-index: 1; }
     #map { height: 100%; width: 100%; background: #111; }
     .overlay-top { position: absolute; top: 12px; left: 12px; z-index: 2000; pointer-events: auto; }
     .overlay-right { position: absolute; top: 12px; right: 12px; z-index: 2000; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; pointer-events: auto; }
@@ -151,7 +153,7 @@
     .modal.on { display: flex; }
     .sheet { background: #1c1917; border: 1px solid #44403c; border-radius: 16px; width: 100%; max-width: 32rem; max-height: 96vh; height: min(96vh, 860px); display: flex; flex-direction: column; overflow: hidden; }
     .sheet-h, .sheet-f { padding: 12px 16px; border-color: #292524; display: flex; justify-content: space-between; align-items: center; }
-    #region-species-modal .sheet-h { border-bottom: 0; padding-bottom: 8px; }
+    #region-species-modal .sheet-h { border-bottom: 0; padding: 16px 16px 10px; }
     .check-kicker { font-size: 9px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #78716c; margin: 0 0 6px; padding-top: 8px; border-top: 1px solid #44403c; }
     .detail-actions { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 6px; }
     .detail-actions button { width: 100%; padding: 8px 6px; font-size: 11px; }
@@ -186,12 +188,95 @@
     .check-score { font-size: 13px; font-weight: 700; color: #d6d3d1; margin: 0 0 4px; }
     .check-pill { background: #292524; border: 1px solid #44403c; color: #e7e5e4; border-radius: 999px; padding: 3px 8px; font-size: 10px; cursor: pointer; }
     .check-pill.on { border-color: #059669; color: #34d399; }
-    .ring-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 6px 0 4px; }
-    .ring-wrap { text-align: center; background: none; border: 1px solid transparent; color: inherit; padding: 2px; border-radius: 10px; cursor: pointer; width: 100%; }
+    .ring-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin: 8px 0 2px; width: 100%; max-width: 100%; }
+    .ring-wrap { text-align: center; background: none; border: 1px solid transparent; color: inherit; padding: 4px 0 6px; border-radius: 12px; cursor: pointer; width: 100%; min-width: 0; overflow: hidden; }
     .ring-wrap.on { border-color: #34d399; background: #064e3b33; }
-    .ring-wrap .muted { font-size: 9px; line-height: 1.2; }
-    .ring-label { font-size: 10px; font-weight: 700; margin-top: 2px; }
+    .ring-wrap svg { width: 100%; height: auto; max-width: 92px; display: block; margin: 0 auto; }
+    .ring-wrap .muted { font-size: 10px; line-height: 1.2; }
+    .ring-label { font-size: 12px; font-weight: 800; margin-top: 4px; letter-spacing: .01em; }
     .ring-fill { transition: stroke-dashoffset .9s cubic-bezier(.22,1,.36,1); }
+    #region-species-modal .check-progress { padding: 8px 12px 10px; overflow-x: hidden; }
+    #region-species-modal .check-tools,
+    #region-species-modal .check-progress .two { gap: 6px; margin-bottom: 0; }
+    #region-species-modal select,
+    #region-species-modal input[type=text] {
+      font-family: inherit; font-size: 12px; line-height: 1.2;
+      padding: 4px 6px; border-radius: 6px;
+    }
+    #region-species-modal .tabs { padding: 6px 10px; }
+    #region-species-modal .check-tools { padding: 8px 12px; }
+    #region-species-modal .sheet-b { padding: 8px 12px 20px; }
+    #compare-modal .sheet { max-width: 44rem; height: min(96vh, 920px); }
+    .cmp-bar { padding: 8px 12px 10px; border-bottom: 1px solid #292524; display: flex; flex-direction: column; gap: 8px; }
+    .cmp-pick { display: flex; align-items: center; gap: 6px; min-width: 0; }
+    .cmp-pick label { font-size: 11px; color: #a8a29e; flex: none; }
+    .cmp-pick select { flex: 1; min-width: 0; font-size: 12px; padding: 4px 6px; border-radius: 6px; }
+    .cmp-scrub-row { display: grid; grid-template-columns: auto minmax(0, 1fr) 3.4rem; align-items: center; gap: 8px; }
+    .cmp-scrub-row .seg { justify-self: start; }
+    .cmp-range-wrap { position: relative; flex: 1; min-width: 0; height: 28px; }
+    .cmp-range-wrap input[type=range] {
+      position: absolute; left: 0; top: 8px; width: 100%; margin: 0;
+      background: none; pointer-events: none; appearance: none; height: 12px;
+    }
+    .cmp-range-wrap input[type=range]::-webkit-slider-runnable-track { height: 4px; background: transparent; }
+    .cmp-range-wrap input[type=range]::-webkit-slider-thumb {
+      appearance: none; pointer-events: auto; width: 16px; height: 16px; border-radius: 50%;
+      background: #34d399; border: 2px solid #022c22; margin-top: -6px; cursor: pointer;
+    }
+    .cmp-range-wrap input[type=range]::-moz-range-track { height: 4px; background: transparent; border: 0; }
+    .cmp-range-wrap input[type=range]::-moz-range-thumb {
+      pointer-events: auto; width: 16px; height: 16px; border-radius: 50%;
+      background: #34d399; border: 2px solid #022c22; cursor: pointer;
+    }
+    .cmp-track {
+      position: absolute; left: 0; right: 0; top: 13px; height: 4px; border-radius: 99px;
+      background: #292524; overflow: hidden; pointer-events: none;
+    }
+    .cmp-track > i { position: absolute; top: 0; height: 100%; background: #059669; }
+    .cmp-month-lab { font-size: 11px; font-weight: 700; color: #d6d3d1; text-align: center; line-height: 1.15; min-width: 0; }
+    .cmp-toggles { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+    .cmp-toggles .seg button { font-size: 10px; padding: 4px 7px; }
+    .cmp-stats {
+      display: grid; grid-template-columns: 1fr auto 1fr; gap: 8px; align-items: center;
+      background: linear-gradient(180deg, #211e1b 0%, #141210 100%);
+      border: 1px solid #3f3a36; border-radius: 14px; padding: 10px 12px;
+    }
+    .cmp-stat { text-align: center; min-width: 0; }
+    .cmp-stat .num { font-size: 28px; font-weight: 800; letter-spacing: -.04em; line-height: 1; }
+    .cmp-stat .num.em { color: #34d399; }
+    .cmp-stat .num.cool { color: #93c5fd; }
+    .cmp-stat .cap { font-size: 10px; color: #a8a29e; margin-top: 3px; line-height: 1.25; }
+    .cmp-stat-mid { text-align: center; color: #78716c; font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+    .cmp-lean { font-size: 11px; color: #a8a29e; text-align: center; margin-top: 2px; }
+    .cmp-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 8px 12px 16px; overflow: hidden; flex: 1; min-height: 0; }
+    .cmp-col { min-width: 0; min-height: 0; display: flex; flex-direction: column; background: #0c0a09; border: 1px solid #292524; border-radius: 12px; overflow: hidden; }
+    .cmp-col h3 { margin: 0; padding: 8px 10px 6px; font-size: 12px; border-bottom: 1px solid #292524; display: flex; justify-content: space-between; align-items: baseline; gap: 6px; }
+    .cmp-col h3 span { font-size: 10px; font-weight: 600; color: #a8a29e; }
+    .cmp-list { overflow: auto; flex: 1; min-height: 0; padding: 6px; }
+    .cmp-row {
+      width: 100%; background: #1c1917; border: 1px solid #292524; border-radius: 10px;
+      padding: 8px 8px 7px; margin-bottom: 5px; text-align: left; cursor: pointer;
+      display: flex; flex-direction: column; gap: 5px; align-items: stretch;
+    }
+    .cmp-row:hover { border-color: #44403c; }
+    .cmp-row-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+    .cmp-row b { display: block; font-size: 12px; font-weight: 700; line-height: 1.25; color: #f5f5f4; min-width: 0; }
+    .cmp-row:hover b { color: #34d399; }
+    .cmp-bars { display: flex; flex-direction: column; gap: 4px; margin: 0; min-width: 0; width: 100%; }
+    .cmp-barline { display: grid; grid-template-columns: 18px minmax(0, 1fr) 28px; gap: 5px; align-items: center; font-size: 9px; color: #a8a29e; }
+    .cmp-barline.solo { grid-template-columns: minmax(0, 1fr) 28px; }
+    .cmp-barline i { display: block; height: 5px; background: #292524; border-radius: 99px; overflow: hidden; min-width: 0; }
+    .cmp-barline i em { display: block; height: 100%; border-radius: 99px; }
+    .cmp-delta { margin: 0; padding: 0; border: 0; background: none; font-size: 10px; font-weight: 700; white-space: nowrap; flex: none; }
+    .cmp-delta.up { color: #34d399; }
+    .cmp-delta.down { color: #93c5fd; }
+    .cmp-delta.even { color: #a8a29e; }
+    @media (max-width: 420px) {
+      .ring-wrap svg { max-width: 78px; }
+      .ring-label { font-size: 11px; }
+      .cmp-stat .num { font-size: 22px; }
+      .cmp-cols { gap: 6px; padding: 6px 8px 12px; }
+    }
     .trend-card { background: #0c0a09; border: 1px solid #292524; border-radius: 10px; padding: 8px; margin-top: 6px; }
     .trend-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; }
     .trend-num { font-size: 16px; font-weight: 800; color: #34d399; }
@@ -207,9 +292,26 @@
     a.merlin-link { color: #34d399; font-size: 10px; font-weight: 700; text-decoration: none; white-space: nowrap; }
     a.merlin-link:hover { text-decoration: underline; }
     .tabs { display: flex; background: #0c0a09; padding: 4px; gap: 4px; }
-    .tabs button { flex: 1; background: none; border: 0; color: #a8a29e; padding: 8px; border-radius: 8px; font-size: 12px; font-weight: 600; }
+    .tabs button { flex: 1; background: none; border: 0; color: #a8a29e; padding: 8px 4px; border-radius: 8px; font-size: 11px; font-weight: 600; }
     .tabs button.on { background: #059669; color: #fff; }
     .two { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .loc-actions { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+    .loc-actions button { font-size: 11px; padding: 8px 6px; line-height: 1.2; }
+    .species-input-wrap { position: relative; }
+    .species-input-wrap input[type=text] { padding-right: 36px; }
+    .species-clear {
+      position: absolute; right: 2px; top: 50%; transform: translateY(-50%);
+      width: 30px; height: 30px; border: 0; background: none; color: #a8a29e; font-size: 16px; line-height: 1;
+    }
+    .species-clear[hidden] { display: none; }
+    #detail-img.has-photo { cursor: zoom-in; }
+    .lightbox {
+      display: none; position: fixed; inset: 0; z-index: 7000;
+      background: rgba(0,0,0,.94); align-items: center; justify-content: center; padding: 10px;
+      cursor: zoom-out;
+    }
+    .lightbox.on { display: flex; }
+    .lightbox img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 4px; }
     .leaflet-popup-content-wrapper { border-radius: 14px; background: #1c1917; color: #f5f5f4; border: 1px solid #44403c; }
     .leaflet-popup-tip { background: #1c1917; }
     .popup-open { display: block; width: 100%; min-width: 160px; text-align: left; background: none; border: 0; color: inherit; cursor: pointer; padding: 0; }
@@ -480,7 +582,7 @@
         </div>
       </div>
       <div class="check-progress">
-        <div class="two" style="margin-bottom:8px">
+        <div class="two" style="margin-bottom:4px">
           <select id="checklist-status-break" onchange="setChecklistStatusFilter(this.value)">
             <option value="all">All seasons</option>
             <option value="Year-round Resident">Year-round</option>
@@ -498,8 +600,9 @@
       <div class="tabs">
         <button id="tab-btn-discovered" class="on" onclick="switchRegionModalTab('discovered')">Discovered (<span id="modal-discovered-count">0</span>)</button>
         <button id="tab-btn-missing" onclick="switchRegionModalTab('missing')">Missing (<span id="modal-missing-count">0</span>)</button>
+        <button id="tab-btn-compare" onclick="switchRegionModalTab('compare')">Compare</button>
       </div>
-      <div style="padding:8px 12px;display:flex;flex-direction:column;gap:6px">
+      <div class="check-tools" id="checklist-list-tools">
         <div class="two">
           <input type="text" id="checklist-search" placeholder="Search species…" oninput="scheduleChecklistRender()" />
           <select id="checklist-sort" onchange="renderChecklistViews()">
@@ -513,11 +616,51 @@
       <div class="sheet-b">
         <div id="modal-discovered-view"></div>
         <div id="modal-missing-view" style="display:none"></div>
+        <div id="modal-compare-view" style="display:none">
+          <div class="cmp-bar" style="border-bottom:0;padding:0 0 10px">
+            <div class="cmp-pick">
+              <label for="compare-state-b">Compare with</label>
+              <select id="compare-state-b" onchange="onCompareStateChange()"></select>
+            </div>
+            <div class="cmp-scrub-row">
+              <div class="seg" id="compare-all-seg">
+                <button type="button" id="btn-compare-all" class="on" onclick="toggleCompareAll()">ALL</button>
+              </div>
+              <div class="cmp-range-wrap">
+                <div class="cmp-track"><i id="compare-track-fill"></i></div>
+                <input type="range" id="compare-month-a" min="0" max="11" value="0" oninput="onCompareMonthInput('a')" />
+                <input type="range" id="compare-month-b" min="0" max="11" value="11" oninput="onCompareMonthInput('b')" />
+              </div>
+              <div class="cmp-month-lab" id="compare-month-label">Jan–Dec</div>
+            </div>
+            <div class="cmp-toggles">
+              <div class="seg" id="compare-logged-seg">
+                <button type="button" id="btn-compare-unlogged" onclick="toggleCompareUnlogged()">Unlogged only</button>
+              </div>
+              <div class="seg" id="compare-mode-seg">
+                <button type="button" id="btn-cmp-all" class="on" onclick="setCompareMode('all')">All birds</button>
+                <button type="button" id="btn-cmp-diff" onclick="setCompareMode('diff')">Different</button>
+                <button type="button" id="btn-cmp-common" onclick="setCompareMode('common')">In common</button>
+              </div>
+              <div class="seg" id="compare-sort-seg">
+                <button type="button" id="btn-cmp-az" class="on" onclick="setCompareSort('az')">A–Z</button>
+                <button type="button" id="btn-cmp-freq" onclick="setCompareSort('freq')">Frequency</button>
+              </div>
+            </div>
+            <div class="cmp-stats" id="compare-stats"></div>
+          </div>
+          <div class="cmp-cols" style="padding:0;flex:none;min-height:420px;height:min(52vh,520px)">
+            <div class="cmp-col">
+              <h3 id="compare-col-a-title">State A <span id="compare-col-a-count"></span></h3>
+              <div class="cmp-list" id="compare-list-a"></div>
+            </div>
+            <div class="cmp-col">
+              <h3 id="compare-col-b-title">State B <span id="compare-col-b-count"></span></h3>
+              <div class="cmp-list" id="compare-list-b"></div>
+            </div>
+          </div>
+        </div>
         <button type="button" class="to-top" aria-label="Back to top">↑</button>
-      </div>
-      <div class="sheet-f">
-        <span id="modal-summary-pct" class="mono" style="color:#34d399">0% Completed</span>
-        <button class="ghost" onclick="dismissChecklistModal(false)">Close</button>
       </div>
     </div>
   </div>
@@ -532,7 +675,7 @@
         <button class="x" onclick="closeDetailModal()">✕</button>
       </div>
       <div class="sheet-b">
-        <img id="detail-img" alt="" style="width:100%;max-height:320px;object-fit:contain;background:#0c0a09;border-radius:12px" />
+        <img id="detail-img" alt="" onclick="openPhotoLightbox()" style="width:100%;max-height:320px;object-fit:contain;background:#0c0a09;border-radius:12px" />
         <div class="two" style="margin-top:12px">
           <div><div class="muted">Date Seen</div><div id="detail-date"></div></div>
           <div><div class="muted">Location</div><div id="detail-location"></div></div>
@@ -552,6 +695,10 @@
     </div>
   </div>
 
+  <div id="photo-lightbox" class="lightbox" onclick="closePhotoLightbox()">
+    <img id="lightbox-img" alt="" />
+  </div>
+
   <div id="upload-modal" class="modal">
     <div class="sheet">
       <div class="sheet-h">
@@ -561,8 +708,11 @@
       <div class="sheet-b">
         <div class="field rel">
           <label>Species</label>
-          <input type="hidden" id="form-species" />
-          <input type="text" id="form-species-search" placeholder="Type a species name…" autocomplete="off" oninput="onSpeciesSearchInput()" />
+          <div class="species-input-wrap">
+            <input type="hidden" id="form-species" />
+            <input type="text" id="form-species-search" placeholder="Type a species name…" autocomplete="off" oninput="onSpeciesSearchInput()" />
+            <button type="button" class="species-clear" id="btn-clear-species" hidden onclick="clearFormSpecies()" title="Clear species">✕</button>
+          </div>
           <div id="form-species-results" class="results"></div>
         </div>
         <div class="field">
@@ -587,9 +737,10 @@
         </div>
         <div class="field">
           <label>Location</label>
-          <div class="two">
+          <div class="loc-actions">
             <button type="button" class="ghost" id="btn-use-gps" onclick="fetchGPSLocation()">Use My GPS</button>
             <button type="button" class="ghost" id="btn-pick-map" onclick="togglePickerMap()">Pick on Map</button>
+            <button type="button" class="ghost" id="btn-last-loc" onclick="useLastLocation()">Last location</button>
           </div>
           <div class="place-row">
             <select id="form-saved-place" onchange="applySavedPlace(this.value)">
@@ -1104,7 +1255,8 @@
       if (!Array.isArray(savedPlaces)) savedPlaces = [];
       const sel = document.getElementById('form-saved-place');
       if (!sel) return;
-      sel.innerHTML = '<option value="">Saved places…</option>' + savedPlaces.map(p =>
+      const sorted = savedPlaces.slice().sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' }));
+      sel.innerHTML = '<option value="">Saved places…</option>' + sorted.map(p =>
         '<option value="' + p.id + '">' + p.name + '</option>'
       ).join('');
     }
@@ -1325,6 +1477,7 @@
       if (i < 0) i = 0;
       openFixedCycle(clusterPeers, i + dir, true);
     }
+    window.cycleClusterPopup = cycleClusterPopup;
 
     function bindClusterGroup(group) {
       if (!group) return;
@@ -2051,15 +2204,32 @@
       return set;
     }
 
+    function officialListCodes(regionCode) {
+      const entry = decodeState(regionCode);
+      const set = new Set();
+      const list = (entry && entry.list) || [];
+      for (let i = 0; i < list.length; i++) {
+        const c = list[i] && list[i].code;
+        if (c && isRealSpecies(c)) set.add(c);
+      }
+      return set;
+    }
+
+    function countLoggedOnOfficialList(logged, regionCode) {
+      const onList = officialListCodes(regionCode);
+      let count = 0;
+      onList.forEach(c => { if (logged && logged.has(c)) count++; });
+      return { count: count, total: onList.size };
+    }
+
     function updateRegionalHUD() {
       const isCountry = currentRegionLevel === 'country';
-      const code = isCountry ? 'US' : (STATE_CODES[activeState] || 'US-NC');
-      const entry = decodeState(code);
-      const realList = entry.list.filter(sp => isRealSpecies(sp.code));
-      const total = realList.length || 0;
-      const logged = loggedCodesFor(activeState, isCountry || statsMode === 'country');
-      let count = 0;
-      logged.forEach(c => { if (isRealSpecies(c)) count++; });
+      const regionCode = isCountry ? 'US' : (STATE_CODES[activeState] || 'US-NC');
+      const creditCountry = isCountry || statsMode === 'country';
+      const logged = loggedCodesFor(activeState, creditCountry);
+      const tallied = countLoggedOnOfficialList(logged, regionCode);
+      const count = tallied.count;
+      const total = tallied.total;
       const pct = total ? ((count / total) * 100).toFixed(1) : '0.0';
       document.getElementById('region-label').textContent = isCountry ? 'United States' : activeState;
       document.getElementById('region-stats').textContent = total
@@ -2153,16 +2323,63 @@
       return rows[0];
     }
 
+    function stateLatLngBounds(name) {
+      const box = STATE_BOUNDS[name || activeState];
+      if (!box || typeof L === 'undefined') return null;
+      return L.latLngBounds([box[1], box[0]], [box[3], box[2]]);
+    }
+
+    let pendingStateFit = false;
+
+    function fitActiveStateOnMap() {
+      if (!mapInstance || typeof L === 'undefined') return false;
+      const bounds = stateLatLngBounds(activeState);
+      if (!bounds || !bounds.isValid || !bounds.isValid()) return false;
+      try { mapInstance.invalidateSize({ animate: false, pan: false }); } catch (e) {}
+      const size = mapInstance.getSize();
+      if (!size || size.x < 40 || size.y < 40) return false;
+      skipHuntMove = 4;
+      const padX = Math.min(32, Math.max(10, size.x * 0.05));
+      const padY = Math.min(72, Math.max(16, size.y * 0.12));
+      let zoom = 6;
+      try {
+        zoom = mapInstance.getBoundsZoom(bounds, false, L.point(padX * 2, padY * 2));
+      } catch (e) {
+        zoom = 6;
+      }
+      if (!isFinite(zoom)) zoom = 6;
+      zoom = Math.max(4, Math.min(12, zoom));
+      const center = bounds.getCenter();
+      try {
+        mapInstance.setView(center, zoom, { animate: false });
+      } catch (e) {
+        try { mapInstance.fitBounds(bounds, { padding: [20, 20], animate: false, maxZoom: 12 }); }
+        catch (e2) { return false; }
+      }
+      pendingStateFit = false;
+      return true;
+    }
+
+    function requestFitActiveState() {
+      pendingStateFit = true;
+      const attempt = (n) => {
+        if (fitActiveStateOnMap()) return;
+        if (n < 10) setTimeout(() => attempt(n + 1), 80);
+      };
+      requestAnimationFrame(() => requestAnimationFrame(() => attempt(0)));
+    }
+
     function jumpSpeciesToRadarMap(code) {
       if (!code) return;
-      switchTab('map');
       huntBack = 30;
       [3, 7, 30].forEach(d => {
         const el = document.getElementById('btn-hunt-' + d + 'd');
         if (el) el.className = d === 30 ? 'on' : '';
       });
+      switchTab('map');
       setMapMode('hunt');
       setMapSpeciesFilter(code);
+      requestFitActiveState();
     }
 
     function showMissingOnMap(code) {
@@ -2478,12 +2695,13 @@
       const have = lifeCodes();
       const sort = (document.getElementById('radar-sort') || {}).value || 'prob';
       const shown = (document.getElementById('radar-shown') || {}).value || 'all';
+      const focusOnce = radarFocusCode;
       const targets = [];
       const nearby = shown === 'nearby' || (radarScope !== 'state' && shown !== 'all');
       if (!nearby) {
         for (let i = 0; i < entry.list.length; i++) {
           const sp = entry.list[i];
-          if (!isRealSpecies(sp.code) || have.has(sp.code)) continue;
+          if (!isRealSpecies(sp.code) || (have.has(sp.code) && sp.code !== focusOnce)) continue;
           if (shown === 'month' && monthProb(sp) <= 0) continue;
           targets.push({ ...sp, prob: monthProb(sp), ...taxName(sp.code) });
         }
@@ -2491,7 +2709,7 @@
         const seen = new Set();
         (huntCache.obs || []).forEach(o => {
           const spCode = o.speciesCode;
-          if (!spCode || seen.has(spCode) || have.has(spCode)) return;
+          if (!spCode || seen.has(spCode) || (have.has(spCode) && spCode !== focusOnce)) return;
           if (DATA.T[spCode] && !isRealSpecies(spCode)) return;
           seen.add(spCode);
           const sp = speciesFromState(spCode);
@@ -2509,11 +2727,12 @@
       const countEl = document.getElementById('radar-count');
       const scopeLabel = radarScope === 'state' ? activeState : (huntCache.label || radarScope);
       if (countEl) countEl.textContent = targets.length + ' unlogged targets · ' + scopeLabel;
-      const focusOnce = radarFocusCode;
       if (focusOnce && !targets.some(t => t.code === focusOnce)) {
         const shownEl = document.getElementById('radar-shown');
         if (shownEl && shownEl.value !== 'all') { shownEl.value = 'all'; renderRadar(); return; }
-        radarFocusCode = '';
+        const n = taxName(focusOnce);
+        const sp = speciesFromState(focusOnce);
+        targets.unshift({ ...sp, code: focusOnce, prob: monthProb(sp), comName: n.comName, sciName: n.sciName });
       }
       document.getElementById('radar-list').innerHTML = targets.map(t => {
         const b = seasonBucket(t);
@@ -2562,7 +2781,11 @@
     }
 
     async function openRegionSpeciesModal() {
-      document.getElementById('modal-region-title').textContent = currentRegionLevel === 'country' ? 'United States' : activeState;
+      const isCountry = currentRegionLevel === 'country';
+      document.getElementById('modal-region-title').textContent = isCountry ? 'United States' : activeState;
+      const cmpTab = document.getElementById('tab-btn-compare');
+      if (cmpTab) cmpTab.style.display = isCountry ? 'none' : '';
+      if (isCountry && modalTab === 'compare') modalTab = 'discovered';
       document.getElementById('region-species-modal').classList.add('on');
       switchRegionModalTab(modalTab || 'discovered');
       if (!DATA.S || !Object.keys(DATA.S).length) await loadData();
@@ -2573,10 +2796,20 @@
     function closeRegionSpeciesModal() { dismissChecklistModal(false); }
     function switchRegionModalTab(tab) {
       modalTab = tab;
+      const isCompare = tab === 'compare';
       document.getElementById('modal-discovered-view').style.display = tab === 'discovered' ? 'block' : 'none';
       document.getElementById('modal-missing-view').style.display = tab === 'missing' ? 'block' : 'none';
+      const cmpView = document.getElementById('modal-compare-view');
+      if (cmpView) cmpView.style.display = isCompare ? 'block' : 'none';
       document.getElementById('tab-btn-discovered').className = tab === 'discovered' ? 'on' : '';
       document.getElementById('tab-btn-missing').className = tab === 'missing' ? 'on' : '';
+      const cmpTab = document.getElementById('tab-btn-compare');
+      if (cmpTab) cmpTab.className = isCompare ? 'on' : '';
+      const tools = document.getElementById('checklist-list-tools');
+      if (tools) tools.style.display = isCompare ? 'none' : '';
+      const progress = document.querySelector('#region-species-modal .check-progress');
+      if (progress) progress.style.display = isCompare ? 'none' : '';
+      if (isCompare) openComparePanel();
     }
     function scheduleChecklistRender() {
       clearTimeout(searchTimer);
@@ -2600,7 +2833,7 @@
     function ringSVG(id, pct, color, label, have, total) {
       const r = 40, c = 2 * Math.PI * r, p = Math.max(0, Math.min(1, pct || 0));
       const on = checklistRarity === id ? ' on' : '';
-      return '<button type="button" class="ring-wrap' + on + '" onclick="setChecklistRarity(\'' + id + '\')"><svg viewBox="0 0 108 108" width="108" height="108">' +
+      return '<button type="button" class="ring-wrap' + on + '" onclick="setChecklistRarity(\'' + id + '\')"><svg viewBox="0 0 108 108" width="100%" height="100%" preserveAspectRatio="xMidYMid meet">' +
         '<circle cx="54" cy="54" r="' + r + '" fill="none" stroke="#292524" stroke-width="9"/>' +
         '<circle class="ring-fill" data-ring="' + id + '" data-pct="' + p + '" cx="54" cy="54" r="' + r + '" fill="none" stroke="' + color + '" stroke-width="9" stroke-linecap="round" stroke-dasharray="' + c.toFixed(2) + '" stroke-dashoffset="' + c.toFixed(2) + '" transform="rotate(-90 54 54)"/>' +
         '<text x="54" y="59" text-anchor="middle" fill="#fafaf9" font-size="17" font-weight="700">' + Math.round(p * 100) + '%</text></svg>' +
@@ -2748,8 +2981,6 @@
       document.getElementById('modal-missing-count').textContent = miss.length;
       if (modalTab === 'discovered' && !disc.length && miss.length) switchRegionModalTab('missing');
       else if (modalTab === 'missing' && !miss.length && disc.length) switchRegionModalTab('discovered');
-      document.getElementById('modal-summary-pct').textContent = (disc.length + miss.length) + ' shown · ' + total + ' countable';
-
       document.getElementById('modal-discovered-view').innerHTML = disc.map(item => {
         const rec = item.firstRec;
         const photo = rec && (rec.photo_url || '');
@@ -2790,6 +3021,325 @@
       openRegionSpeciesModal();
     }
 
+    let compareStateB = localStorage.getItem('avian_compare_state') || '';
+    let compareAllMonths = true;
+    let compareMonthA = 0;
+    let compareMonthB = 11;
+    let compareUnlogged = false;
+    let compareMode = 'all';
+    let compareSort = 'az';
+
+    function stateShort(name) {
+      const code = STATE_CODES[name] || '';
+      return code.replace('US-', '') || name;
+    }
+
+    function rangeFreq(monthly, a, b) {
+      if (!monthly || !monthly.length) return 0;
+      const lo = Math.min(a, b), hi = Math.max(a, b);
+      let s = 0, n = 0;
+      for (let i = lo; i <= hi; i++) { s += monthly[i] || 0; n++; }
+      return n ? s / n : 0;
+    }
+
+    function rangePresent(monthly, a, b) {
+      if (!monthly || !monthly.length) return false;
+      const lo = Math.min(a, b), hi = Math.max(a, b);
+      for (let i = lo; i <= hi; i++) if ((monthly[i] || 0) > 0) return true;
+      return false;
+    }
+
+    function lifeLoggedCodes() {
+      const set = new Set();
+      sightings.forEach(s => { if (s.species_code) set.add(s.species_code); });
+      return set;
+    }
+
+    function compareSpeciesMap(stateName) {
+      const code = STATE_CODES[stateName];
+      const entry = decodeState(code || 'US-NC');
+      const map = new Map();
+      const a = compareAllMonths ? 0 : compareMonthA;
+      const b = compareAllMonths ? 11 : compareMonthB;
+      for (let i = 0; i < entry.list.length; i++) {
+        const sp = entry.list[i];
+        if (!isRealSpecies(sp.code)) continue;
+        if (!compareAllMonths && !rangePresent(sp.monthly, a, b)) continue;
+        const n = taxName(sp.code);
+        map.set(sp.code, {
+          code: sp.code,
+          comName: n.comName,
+          sciName: n.sciName,
+          freq: rangeFreq(sp.monthly, a, b)
+        });
+      }
+      return map;
+    }
+
+    function fillCompareStateSelect(home) {
+      const sel = document.getElementById('compare-state-b');
+      if (!sel) return;
+      const names = Object.keys(STATE_CODES).filter(n => n !== home);
+      if (!compareStateB || compareStateB === home || !STATE_CODES[compareStateB]) {
+        compareStateB = names.includes('Virginia') && home !== 'Virginia' ? 'Virginia' : names[0];
+      }
+      sel.innerHTML = names.map(n => '<option value="' + n.replace(/"/g, '') + '"' + (n === compareStateB ? ' selected' : '') + '>' + n + '</option>').join('');
+      sel.value = compareStateB;
+    }
+
+    function syncCompareMonthUI() {
+      const aEl = document.getElementById('compare-month-a');
+      const bEl = document.getElementById('compare-month-b');
+      const fill = document.getElementById('compare-track-fill');
+      const lab = document.getElementById('compare-month-label');
+      const allBtn = document.getElementById('btn-compare-all');
+      if (aEl) aEl.value = String(Math.min(compareMonthA, compareMonthB));
+      if (bEl) bEl.value = String(Math.max(compareMonthA, compareMonthB));
+      const lo = Math.min(compareMonthA, compareMonthB);
+      const hi = Math.max(compareMonthA, compareMonthB);
+      if (fill) {
+        fill.style.left = (lo / 11 * 100).toFixed(2) + '%';
+        fill.style.width = ((hi - lo) / 11 * 100).toFixed(2) + '%';
+      }
+      if (lab) {
+        if (compareAllMonths) lab.textContent = 'Jan–Dec';
+        else lab.textContent = lo === hi ? MONTH_LABELS[lo] : (MONTH_LABELS[lo] + '–' + MONTH_LABELS[hi]);
+      }
+      if (allBtn) allBtn.className = compareAllMonths ? 'on' : '';
+    }
+
+    async function openComparePanel() {
+      if (currentRegionLevel === 'country') return;
+      if (!DATA.S || !Object.keys(DATA.S).length) await loadData();
+      fillCompareStateSelect(activeState);
+      syncCompareMonthUI();
+      const un = document.getElementById('btn-compare-unlogged');
+      if (un) un.className = compareUnlogged ? 'on' : '';
+      const all = document.getElementById('btn-cmp-all');
+      const diff = document.getElementById('btn-cmp-diff');
+      const common = document.getElementById('btn-cmp-common');
+      if (all) all.className = compareMode === 'all' ? 'on' : '';
+      if (diff) diff.className = compareMode === 'diff' ? 'on' : '';
+      if (common) common.className = compareMode === 'common' ? 'on' : '';
+      const az = document.getElementById('btn-cmp-az');
+      const freq = document.getElementById('btn-cmp-freq');
+      if (az) az.className = compareSort === 'az' ? 'on' : '';
+      if (freq) freq.className = compareSort === 'freq' ? 'on' : '';
+      renderCompareViews();
+    }
+
+    function onCompareStateChange() {
+      const sel = document.getElementById('compare-state-b');
+      compareStateB = (sel && sel.value) || compareStateB;
+      if (compareStateB) localStorage.setItem('avian_compare_state', compareStateB);
+      renderCompareViews();
+    }
+
+    function toggleCompareAll() {
+      compareAllMonths = !compareAllMonths;
+      if (compareAllMonths) { compareMonthA = 0; compareMonthB = 11; }
+      syncCompareMonthUI();
+      renderCompareViews();
+    }
+
+    function onCompareMonthInput(which) {
+      const aEl = document.getElementById('compare-month-a');
+      const bEl = document.getElementById('compare-month-b');
+      let a = Number(aEl && aEl.value);
+      let b = Number(bEl && bEl.value);
+      if (!Number.isFinite(a)) a = 0;
+      if (!Number.isFinite(b)) b = 11;
+      compareMonthA = a;
+      compareMonthB = b;
+      compareAllMonths = (Math.min(a, b) === 0 && Math.max(a, b) === 11);
+      syncCompareMonthUI();
+      renderCompareViews();
+    }
+
+    function toggleCompareUnlogged() {
+      compareUnlogged = !compareUnlogged;
+      document.getElementById('btn-compare-unlogged').className = compareUnlogged ? 'on' : '';
+      renderCompareViews();
+    }
+
+    function setCompareMode(mode) {
+      compareMode = mode;
+      document.getElementById('btn-cmp-all').className = mode === 'all' ? 'on' : '';
+      document.getElementById('btn-cmp-diff').className = mode === 'diff' ? 'on' : '';
+      document.getElementById('btn-cmp-common').className = mode === 'common' ? 'on' : '';
+      renderCompareViews();
+    }
+
+    function setCompareSort(sort) {
+      compareSort = sort;
+      document.getElementById('btn-cmp-az').className = sort === 'az' ? 'on' : '';
+      document.getElementById('btn-cmp-freq').className = sort === 'freq' ? 'on' : '';
+      renderCompareViews();
+    }
+
+    function pctLabel(v) {
+      if (!v) return '0%';
+      const n = Math.round(v * 100);
+      if (n === 0 && v > 0) return '<1%';
+      return n + '%';
+    }
+
+    function relFreqDelta(aAbbr, bAbbr, freqA, freqB) {
+      const d = freqA - freqB;
+      if (Math.abs(d) < 0.015) return { text: 'About even', cls: 'even' };
+      const highAbbr = d > 0 ? aAbbr : bAbbr;
+      const high = Math.max(freqA, freqB);
+      const low = Math.min(freqA, freqB);
+      const cls = d > 0 ? 'up' : 'down';
+      if (low >= 0.005 && high / low >= 2) {
+        const ratio = high / low;
+        const shown = ratio >= 10 ? String(Math.round(ratio)) : ratio.toFixed(1);
+        return { text: shown + '×', cls };
+      }
+      return { text: '+' + Math.round(Math.abs(d) * 100) + ' pts', cls };
+    }
+
+    function compareRowHtml(row, homeAbbr, otherAbbr, showBoth, stateName) {
+      const aW = Math.max(0, Math.min(100, row.freqA * 100));
+      const bW = Math.max(0, Math.min(100, row.freqB * 100));
+      const both = !!(row.inA && row.inB);
+      const stacked = showBoth || both;
+      let delta = '';
+      if (both) {
+        const rel = relFreqDelta(homeAbbr, otherAbbr, row.freqA, row.freqB);
+        delta = '<span class="cmp-delta ' + rel.cls + '">' + rel.text + '</span>';
+      }
+      const bars = stacked
+        ? ('<div class="cmp-bars">' +
+            '<div class="cmp-barline"><span>' + homeAbbr + '</span><i><em style="width:' + aW.toFixed(1) + '%;background:#34d399"></em></i><span>' + pctLabel(row.freqA) + '</span></div>' +
+            '<div class="cmp-barline"><span>' + otherAbbr + '</span><i><em style="width:' + bW.toFixed(1) + '%;background:#93c5fd"></em></i><span>' + pctLabel(row.freqB) + '</span></div>' +
+          '</div>')
+        : ('<div class="cmp-bars"><div class="cmp-barline solo"><i><em style="width:' + (row.side === 'b' ? bW : aW).toFixed(1) + '%;background:' + (row.side === 'b' ? '#93c5fd' : '#34d399') + '"></em></i><span>' + pctLabel(row.side === 'b' ? row.freqB : row.freqA) + '</span></div></div>');
+      const code = String(row.code || '').replace(/\\/g, '').replace(/'/g, '');
+      const st = String(stateName || '').replace(/\\/g, '').replace(/'/g, '');
+      return '<div class="cmp-row" data-cmp-nav="' + code + '" data-cmp-state="' + st + '" onclick="openCompareSpecies(\'' + code + '\',\'' + st + '\')"><div class="cmp-row-top"><b>' + row.comName + '</b>' + delta + '</div>' + bars + '</div>';
+    }
+
+    function renderCompareViews() {
+      const home = activeState;
+      const other = compareStateB;
+      if (!home || !other || !STATE_CODES[other]) return;
+      const mapA = compareSpeciesMap(home);
+      const mapB = compareSpeciesMap(other);
+      const logged = lifeLoggedCodes();
+      const codes = new Set([...mapA.keys(), ...mapB.keys()]);
+      const rows = [];
+      codes.forEach(code => {
+        if (compareUnlogged && logged.has(code)) return;
+        const a = mapA.get(code);
+        const b = mapB.get(code);
+        rows.push({
+          code,
+          comName: (a && a.comName) || (b && b.comName) || code,
+          inA: !!a,
+          inB: !!b,
+          freqA: a ? a.freq : 0,
+          freqB: b ? b.freq : 0
+        });
+      });
+      const onlyA = rows.filter(r => r.inA && !r.inB);
+      const onlyB = rows.filter(r => r.inB && !r.inA);
+      const both = rows.filter(r => r.inA && r.inB);
+      let listA = [];
+      let listB = [];
+      if (compareMode === 'diff') {
+        listA = onlyA.map(r => Object.assign({ side: 'a' }, r));
+        listB = onlyB.map(r => Object.assign({ side: 'b' }, r));
+      } else if (compareMode === 'common') {
+        listA = both.map(r => Object.assign({ side: 'a' }, r));
+        listB = both.map(r => Object.assign({ side: 'b' }, r));
+      } else {
+        listA = rows.filter(r => r.inA).map(r => Object.assign({ side: 'a' }, r));
+        listB = rows.filter(r => r.inB).map(r => Object.assign({ side: 'b' }, r));
+      }
+      const sorter = (side) => (x, y) => {
+        if (compareSort === 'freq') {
+          const xf = side === 'b' ? x.freqB : x.freqA;
+          const yf = side === 'b' ? y.freqB : y.freqA;
+          return yf - xf || x.comName.localeCompare(y.comName);
+        }
+        return x.comName.localeCompare(y.comName);
+      };
+      listA.sort(sorter('a'));
+      listB.sort(sorter('b'));
+
+      const aAb = stateShort(home);
+      const bAb = stateShort(other);
+      const showBoth = compareMode === 'common';
+      let aHigher = 0, bHigher = 0, even = 0;
+      both.forEach(r => {
+        const d = r.freqA - r.freqB;
+        if (Math.abs(d) < 0.015) even++;
+        else if (d > 0) aHigher++;
+        else bHigher++;
+      });
+
+      document.getElementById('compare-col-a-title').innerHTML = home + ' <span id="compare-col-a-count">' + listA.length + '</span>';
+      document.getElementById('compare-col-b-title').innerHTML = other + ' <span id="compare-col-b-count">' + listB.length + '</span>';
+      const stats = document.getElementById('compare-stats');
+      if (compareMode === 'common') {
+        stats.innerHTML =
+          '<div class="cmp-stat"><div class="num em">' + both.length + '</div><div class="cap">species in common</div></div>' +
+          '<div class="cmp-stat-mid">relative<br>frequency</div>' +
+          '<div class="cmp-stat"><div class="num">' + aHigher + ' / ' + bHigher + '</div><div class="cap">' + aAb + ' higher · ' + bAb + ' higher</div><div class="cmp-lean">' + even + ' about even</div></div>';
+      } else {
+        stats.innerHTML =
+          '<div class="cmp-stat"><div class="num em">' + onlyA.length + '</div><div class="cap">only in ' + home + '</div></div>' +
+          '<div class="cmp-stat-mid">' + both.length + '<br>shared</div>' +
+          '<div class="cmp-stat"><div class="num cool">' + onlyB.length + '</div><div class="cap">only in ' + other + '</div></div>';
+      }
+      document.getElementById('compare-list-a').innerHTML = listA.map(r => compareRowHtml(r, aAb, bAb, showBoth, home)).join('') || '<div class="hint">No species on this side.</div>';
+      document.getElementById('compare-list-b').innerHTML = listB.map(r => compareRowHtml(r, aAb, bAb, showBoth, other)).join('') || '<div class="hint">No species on this side.</div>';
+    }
+
+    function focusStateOnMap(name) {
+      if (!name || !STATE_CODES[name]) return;
+      activeState = name;
+      localStorage.setItem('avian_focus_state', name);
+      currentRegionLevel = 'state';
+      const stateBtn = document.getElementById('btn-level-state');
+      const countryBtn = document.getElementById('btn-level-country');
+      if (stateBtn) stateBtn.className = 'on';
+      if (countryBtn) countryBtn.className = '';
+      stateLocked = true;
+      localStorage.setItem('avian_state_lock', '1');
+      syncStateLockBtn();
+      const st = document.getElementById('form-state');
+      if (st) st.value = name;
+      try { updateRegionalHUD(); } catch (e) {}
+      const box = STATE_BOUNDS[name];
+      if (!mapInstance || !box || typeof L === 'undefined') return;
+      try {
+        skipHuntMove = 2;
+        const bounds = L.latLngBounds([box[1], box[0]], [box[3], box[2]]);
+        mapInstance.fitBounds(bounds, { padding: [24, 24], animate: false, maxZoom: 7 });
+      } catch (e) {}
+    }
+
+    function openCompareSpecies(code, stateName) {
+      if (!code) return;
+      if (stateName && STATE_CODES[stateName] && stateName !== activeState) {
+        activeState = stateName;
+        localStorage.setItem('avian_focus_state', stateName);
+        currentRegionLevel = 'state';
+        const stateBtn = document.getElementById('btn-level-state');
+        const countryBtn = document.getElementById('btn-level-country');
+        if (stateBtn) stateBtn.className = 'on';
+        if (countryBtn) countryBtn.className = '';
+        try { updateRegionalHUD(); } catch (e) {}
+      }
+      radarScope = 'state';
+      const scopeEl = document.getElementById('radar-scope');
+      if (scopeEl) scopeEl.value = 'state';
+      openTargetFromChecklist(code);
+    }
+    window.openCompareSpecies = openCompareSpecies;
+
     function openSpeciesDossier(code) {
       const row = sightings.filter(s => s.species_code === code).sort((a,b) => (b.is_cover - a.is_cover) || b.date.localeCompare(a.date))[0];
       if (row) openDetailModal(row.id);
@@ -2822,7 +3372,10 @@
       if (!s) return;
       currentDetailId = id;
       const n = taxName(s.species_code);
-      document.getElementById('detail-img').src = s.photo_url || '';
+      const detailImg = document.getElementById('detail-img');
+      const preview = s.photo_url || s.photo_full || '';
+      detailImg.src = preview;
+      detailImg.classList.toggle('has-photo', !!preview);
       document.getElementById('detail-common-name').textContent = n.comName;
       document.getElementById('detail-scientific-name').textContent = n.sciName;
       document.getElementById('detail-date').textContent = s.date;
@@ -2900,7 +3453,28 @@
       renderGallery();
       renderRadar();
     }
+    function openPhotoLightbox() {
+      const s = sightings.find(x => x.id === currentDetailId);
+      if (!s) return;
+      const src = s.photo_full || s.photo_url;
+      if (!src) return;
+      const box = document.getElementById('photo-lightbox');
+      const img = document.getElementById('lightbox-img');
+      if (!box || !img) return;
+      img.src = src;
+      img.alt = taxName(s.species_code).comName || '';
+      box.classList.add('on');
+    }
+
+    function closePhotoLightbox() {
+      const box = document.getElementById('photo-lightbox');
+      const img = document.getElementById('lightbox-img');
+      if (box) box.classList.remove('on');
+      if (img) img.removeAttribute('src');
+    }
+
     function closeDetailModal(opts) {
+      closePhotoLightbox();
       document.getElementById('detail-modal').classList.remove('on');
       if (opts && opts.skipResume) {
         checklistResume = false;
@@ -2917,11 +3491,28 @@
       const n = taxName(code);
       document.getElementById('form-species-search').value = n.comName ? (n.comName + (n.sciName ? ' (' + n.sciName + ')' : '')) : (code || '');
       document.getElementById('form-species-results').classList.remove('on');
+      syncSpeciesClearBtn();
+    }
+
+    function clearFormSpecies() {
+      document.getElementById('form-species').value = '';
+      document.getElementById('form-species-search').value = '';
+      document.getElementById('form-species-results').classList.remove('on');
+      const search = document.getElementById('form-species-search');
+      if (search) search.focus();
+      syncSpeciesClearBtn();
+    }
+
+    function syncSpeciesClearBtn() {
+      const btn = document.getElementById('btn-clear-species');
+      const search = document.getElementById('form-species-search');
+      if (btn) btn.hidden = !((search && search.value) || document.getElementById('form-species').value);
     }
 
     function onSpeciesSearchInput() {
       const q = (document.getElementById('form-species-search').value || '').trim().toLowerCase();
       const box = document.getElementById('form-species-results');
+      syncSpeciesClearBtn();
       if (!q) { box.classList.remove('on'); document.getElementById('form-species').value = ''; return; }
       const hits = [];
       const codes = Object.keys(DATA.T);
@@ -3193,8 +3784,50 @@
     function setLocMode(mode) {
       const gps = document.getElementById('btn-use-gps');
       const map = document.getElementById('btn-pick-map');
+      const last = document.getElementById('btn-last-loc');
       if (gps) gps.className = mode === 'gps' ? 'btn-em' : 'ghost';
       if (map) map.className = mode === 'map' ? 'btn-em' : 'ghost';
+      if (last) last.className = mode === 'last' ? 'btn-em' : 'ghost';
+    }
+
+    function readLastLogLocation() {
+      try {
+        const saved = JSON.parse(localStorage.getItem('avian_last_log_loc') || 'null');
+        if (saved && saved.lat != null && saved.lng != null) return saved;
+      } catch (e) {}
+      for (let i = sightings.length - 1; i >= 0; i--) {
+        const s = sightings[i];
+        if (s && s.lat != null && s.lng != null) {
+          return {
+            lat: Number(s.lat), lng: Number(s.lng),
+            location_name: s.location_name || '',
+            county: s.county || '',
+            state: s.state || ''
+          };
+        }
+      }
+      return null;
+    }
+
+    function rememberLastLogLocation(row) {
+      if (!row || row.lat == null || row.lng == null) return;
+      localStorage.setItem('avian_last_log_loc', JSON.stringify({
+        lat: Number(row.lat), lng: Number(row.lng),
+        location_name: row.location_name || '',
+        county: row.county || '',
+        state: row.state || ''
+      }));
+    }
+
+    function useLastLocation() {
+      const last = readLastLogLocation();
+      if (!last) { alert('No previous location yet.'); return; }
+      if (last.location_name) document.getElementById('form-location').value = last.location_name;
+      if (last.county) document.getElementById('form-county').value = last.county;
+      if (last.state) document.getElementById('form-state').value = last.state;
+      ensurePickerMap();
+      setFormCoordinates(last.lat, last.lng, false);
+      setLocMode('last');
     }
 
     async function reverseFillLocation(lat, lng) {
@@ -3214,8 +3847,8 @@
         pickerMap = L.map('picker-map', { zoomControl: false, preferCanvas: true }).setView([selectedCoords.lat, selectedCoords.lng], 13);
         L.tileLayer(tileUrl(), { maxZoom: 18 }).addTo(pickerMap);
         pickerMarker = L.marker([selectedCoords.lat, selectedCoords.lng], { draggable: true }).addTo(pickerMap);
-        pickerMarker.on('dragend', e => setFormCoordinates(e.target.getLatLng().lat, e.target.getLatLng().lng));
-        pickerMap.on('click', e => setFormCoordinates(e.latlng.lat, e.latlng.lng));
+        pickerMarker.on('dragend', e => setFormCoordinates(e.target.getLatLng().lat, e.target.getLatLng().lng, true, true));
+        pickerMap.on('click', e => setFormCoordinates(e.latlng.lat, e.latlng.lng, true, true));
       }
       setTimeout(() => pickerMap && pickerMap.invalidateSize(), 120);
     }
@@ -3229,13 +3862,17 @@
       }, () => {}, { enableHighAccuracy: true, timeout: 8000 });
     }
 
-    function setFormCoordinates(lat, lng, fillName) {
-      selectedCoords = { lat, lng };
+    function setFormCoordinates(lat, lng, fillName, keepZoom) {
+      selectedCoords = { lat: Number(lat), lng: Number(lng) };
       if (pickerMap && pickerMarker) {
-        pickerMarker.setLatLng([lat, lng]);
-        pickerMap.setView([lat, lng], Math.max(pickerMap.getZoom() || 13, 14));
+        pickerMarker.setLatLng([selectedCoords.lat, selectedCoords.lng]);
+        if (keepZoom) {
+          pickerMap.panTo([selectedCoords.lat, selectedCoords.lng], { animate: false });
+        } else {
+          pickerMap.setView([selectedCoords.lat, selectedCoords.lng], pickerMap.getZoom() || 13);
+        }
       }
-      if (fillName !== false) reverseFillLocation(lat, lng);
+      if (fillName !== false) reverseFillLocation(selectedCoords.lat, selectedCoords.lng);
     }
 
     function togglePickerMap() {
@@ -3304,6 +3941,7 @@
         }, payload));
       }
       persistSightings();
+      rememberLastLogLocation(payload);
       closeUploadModal();
       refreshUI();
       renderLifeList();
@@ -3329,6 +3967,7 @@
       const fname = document.getElementById('form-file-name');
       if (fname) fname.textContent = 'No photo yet';
       resetCropper();
+      syncSpeciesClearBtn();
       document.getElementById('upload-modal').classList.add('on');
     }
     function closeUploadModal() {
@@ -3345,7 +3984,12 @@
         document.getElementById('view-' + t).classList.toggle('on', t === tab);
         document.getElementById('nav-btn-' + t).classList.toggle('on', t === tab);
       });
-      if (tab === 'map' && mapInstance) setTimeout(() => mapInstance.invalidateSize(), 100);
+      if (tab === 'map' && mapInstance) {
+        setTimeout(() => {
+          try { mapInstance.invalidateSize({ animate: false, pan: false }); } catch (e) {}
+          if (pendingStateFit) fitActiveStateOnMap();
+        }, 60);
+      }
       if (tab === 'lifelist') renderLifeList();
       if (tab === 'gallery') renderGallery();
       if (tab === 'radar') renderRadar();
@@ -3381,11 +4025,20 @@
       const search = document.getElementById('map-species-search');
       if (btn) btn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); toggleMapSpeciesList(); });
       if (search) search.addEventListener('input', filterMapSpeciesList);
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closePhotoLightbox();
+      });
       document.addEventListener('click', (e) => {
         const box = document.getElementById('map-species-box');
         const results = document.getElementById('map-species-results');
-        if (!box || !results || !results.classList.contains('on')) return;
-        if (!box.contains(e.target) && !results.contains(e.target)) results.classList.remove('on');
+        if (box && results && results.classList.contains('on') && !box.contains(e.target) && !results.contains(e.target)) {
+          results.classList.remove('on');
+        }
+        const cmpRow = e.target.closest && e.target.closest('[data-cmp-nav]');
+        if (cmpRow) {
+          e.preventDefault();
+          openCompareSpecies(cmpRow.getAttribute('data-cmp-nav'), cmpRow.getAttribute('data-cmp-state'));
+        }
       });
       document.querySelectorAll('.scroll, #region-species-modal .sheet-b').forEach(box => {
         const btn = box.querySelector('.to-top');
@@ -3405,6 +4058,7 @@
       }
       initMap();
       syncStateLockBtn();
+      setStatsMode(statsMode);
       applyViewState();
       refreshUI();
       await loadData();
