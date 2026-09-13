@@ -307,11 +307,32 @@
     #detail-img.has-photo { cursor: zoom-in; }
     .lightbox {
       display: none; position: fixed; inset: 0; z-index: 7000;
-      background: rgba(0,0,0,.94); align-items: center; justify-content: center; padding: 10px;
-      cursor: zoom-out;
+      background: #070605; flex-direction: column; align-items: stretch;
     }
     .lightbox.on { display: flex; }
-    .lightbox img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 4px; }
+    .lightbox-stage {
+      flex: 1; min-height: 0; position: relative; overflow: hidden;
+      touch-action: none; background: #000; cursor: grab;
+    }
+    .lightbox-stage.dragging { cursor: grabbing; }
+    .lightbox-stage img {
+      position: absolute; left: 50%; top: 50%;
+      max-width: 100%; max-height: 100%; width: auto; height: auto;
+      transform: translate(-50%, -50%); transform-origin: center center;
+      user-select: none; -webkit-user-drag: none; pointer-events: none;
+    }
+    .lightbox-bezel {
+      flex: none; display: flex; align-items: center; gap: 12px;
+      padding: 12px 16px 16px;
+      background:
+        radial-gradient(120px 60px at 8% 0%, rgba(5,150,105,.18), transparent 70%),
+        linear-gradient(180deg, #211e1b 0%, #12100e 100%);
+      border-top: 1px solid #3f3a36;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.04);
+    }
+    .lightbox-bezel-text { flex: 1; min-width: 0; }
+    #lightbox-name { font-size: 16px; font-weight: 800; letter-spacing: -.02em; line-height: 1.2; }
+    #lightbox-meta { margin-top: 3px; font-size: 12px; color: #a8a29e; font-family: ui-monospace, monospace; }
     .leaflet-popup-content-wrapper { border-radius: 14px; background: #1c1917; color: #f5f5f4; border: 1px solid #44403c; }
     .leaflet-popup-tip { background: #1c1917; }
     .popup-open { display: block; width: 100%; min-width: 160px; text-align: left; background: none; border: 0; color: inherit; cursor: pointer; padding: 0; }
@@ -695,8 +716,17 @@
     </div>
   </div>
 
-  <div id="photo-lightbox" class="lightbox" onclick="closePhotoLightbox()">
-    <img id="lightbox-img" alt="" />
+  <div id="photo-lightbox" class="lightbox">
+    <div class="lightbox-stage" id="lightbox-stage">
+      <img id="lightbox-img" alt="" />
+    </div>
+    <div class="lightbox-bezel">
+      <div class="lightbox-bezel-text">
+        <div id="lightbox-name"></div>
+        <div id="lightbox-meta"></div>
+      </div>
+      <button type="button" class="x" onclick="closePhotoLightbox()" aria-label="Close photo">✕</button>
+    </div>
   </div>
 
   <div id="upload-modal" class="modal">
@@ -1052,11 +1082,28 @@
       });
     }
 
+    function exportedSightingIds() {
+      try {
+        const raw = JSON.parse(localStorage.getItem('avian_exported_ids') || '[]');
+        return new Set(Array.isArray(raw) ? raw : []);
+      } catch (e) { return new Set(); }
+    }
+
+    function logsSinceLastExport() {
+      const ids = exportedSightingIds();
+      if (!ids.size && !localStorage.getItem('avian_last_export')) return sightings.length;
+      let n = 0;
+      for (let i = 0; i < sightings.length; i++) {
+        if (!ids.has(sightings[i].id)) n++;
+      }
+      return n;
+    }
+
     function exportLogs() {
       const when = new Date().toISOString();
       localStorage.setItem('avian_last_export', when);
-      const stamp = document.getElementById('last-export-stamp');
-      if (stamp) stamp.textContent = 'Last export: ' + new Date(when).toLocaleString();
+      localStorage.setItem('avian_exported_ids', JSON.stringify(sightings.map(s => s.id)));
+      refreshExportStamp();
       const blob = new Blob([JSON.stringify({ version: 1, saved: when, sightings }, null, 2)], { type: 'application/json' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
@@ -1305,7 +1352,11 @@
       const el = document.getElementById('last-export-stamp');
       if (!el) return;
       const raw = localStorage.getItem('avian_last_export');
-      el.textContent = raw ? ('Last export: ' + new Date(raw).toLocaleString()) : 'No export yet';
+      const n = logsSinceLastExport();
+      const pending = n + ' log' + (n === 1 ? '' : 's') + ' since last export';
+      el.textContent = raw
+        ? ('Last export: ' + new Date(raw).toLocaleString() + ' · ' + pending)
+        : ('No export yet · ' + pending);
     }
 
     function openKeyModal() {
@@ -2831,18 +2882,18 @@
     }
 
     function ringSVG(id, pct, color, label, have, total) {
-      const r = 40, c = 2 * Math.PI * r, p = Math.max(0, Math.min(1, pct || 0));
+      const r = 42, c = 2 * Math.PI * r, p = Math.max(0, Math.min(1, pct || 0));
       const on = checklistRarity === id ? ' on' : '';
       return '<button type="button" class="ring-wrap' + on + '" onclick="setChecklistRarity(\'' + id + '\')"><svg viewBox="0 0 108 108" width="100%" height="100%" preserveAspectRatio="xMidYMid meet">' +
-        '<circle cx="54" cy="54" r="' + r + '" fill="none" stroke="#292524" stroke-width="9"/>' +
-        '<circle class="ring-fill" data-ring="' + id + '" data-pct="' + p + '" cx="54" cy="54" r="' + r + '" fill="none" stroke="' + color + '" stroke-width="9" stroke-linecap="round" stroke-dasharray="' + c.toFixed(2) + '" stroke-dashoffset="' + c.toFixed(2) + '" transform="rotate(-90 54 54)"/>' +
-        '<text x="54" y="59" text-anchor="middle" fill="#fafaf9" font-size="17" font-weight="700">' + Math.round(p * 100) + '%</text></svg>' +
+        '<circle cx="54" cy="54" r="' + r + '" fill="none" stroke="#292524" stroke-width="10"/>' +
+        '<circle class="ring-fill" data-ring="' + id + '" data-pct="' + p + '" cx="54" cy="54" r="' + r + '" fill="none" stroke="' + color + '" stroke-width="10" stroke-linecap="round" stroke-dasharray="' + c.toFixed(2) + '" stroke-dashoffset="' + c.toFixed(2) + '" transform="rotate(-90 54 54)"/>' +
+        '<text x="54" y="61" text-anchor="middle" fill="#fafaf9" font-size="22" font-weight="800">' + Math.round(p * 100) + '%</text></svg>' +
         '<div class="ring-label">' + label + '</div>' +
         '<div class="muted">' + have + ' of ' + total + '</div></button>';
     }
 
     function animateChecklistRings() {
-      const circ = 2 * Math.PI * 40;
+      const circ = 2 * Math.PI * 42;
       requestAnimationFrame(() => {
         document.querySelectorAll('#checklist-rings .ring-fill').forEach(el => {
           const p = Number(el.getAttribute('data-pct') || 0);
@@ -3345,13 +3396,9 @@
       if (row) openDetailModal(row.id);
     }
 
-    function flyToCurrentSighting() {
-      const s = sightings.find(x => x.id === currentDetailId);
-      if (!s || s.lat == null || s.lng == null) return;
-      closeDetailModal({ skipResume: true });
-      switchTab('map');
-      if (typeof setMapMode === 'function') setMapMode('photos');
-      if (!mapInstance) return;
+    function flyToSightingOnMap(id) {
+      const s = sightings.find(x => x.id === id);
+      if (!s || s.lat == null || s.lng == null || !mapInstance) return;
       skipHuntMove = 2;
       mapInstance.setView([Number(s.lat), Number(s.lng)], 16, { animate: true });
       setTimeout(() => {
@@ -3359,7 +3406,15 @@
         markersLayer.eachLayer(layer => {
           if (layer.options && layer.options.sightingId === s.id && layer.openPopup) layer.openPopup();
         });
-      }, 250);
+      }, 280);
+    }
+
+    function flyToCurrentSighting() {
+      const id = currentDetailId;
+      closeDetailModal({ skipResume: true });
+      switchTab('map');
+      if (typeof setMapMode === 'function') setMapMode('photos');
+      flyToSightingOnMap(id);
     }
 
     function openSightingFromMap(id) {
@@ -3453,6 +3508,92 @@
       renderGallery();
       renderRadar();
     }
+    const lbZoom = { scale: 1, x: 0, y: 0, min: 1, max: 6, dragging: false, sx: 0, sy: 0, ox: 0, oy: 0, pinch: 0, moved: false };
+
+    function applyLightboxZoom() {
+      const img = document.getElementById('lightbox-img');
+      if (!img) return;
+      img.style.transform = 'translate(-50%, -50%) translate(' + lbZoom.x + 'px,' + lbZoom.y + 'px) scale(' + lbZoom.scale + ')';
+    }
+
+    function resetLightboxZoom() {
+      lbZoom.scale = 1; lbZoom.x = 0; lbZoom.y = 0; lbZoom.dragging = false; lbZoom.pinch = 0; lbZoom.moved = false;
+      applyLightboxZoom();
+    }
+
+    function lightboxZoomAt(factor, cx, cy, stage) {
+      const prev = lbZoom.scale;
+      const next = Math.max(lbZoom.min, Math.min(lbZoom.max, prev * factor));
+      if (next === prev) return;
+      const rect = stage.getBoundingClientRect();
+      const px = cx - (rect.left + rect.width / 2);
+      const py = cy - (rect.top + rect.height / 2);
+      const k = next / prev;
+      lbZoom.x = px - (px - lbZoom.x) * k;
+      lbZoom.y = py - (py - lbZoom.y) * k;
+      lbZoom.scale = next;
+      if (lbZoom.scale <= 1.02) { lbZoom.scale = 1; lbZoom.x = 0; lbZoom.y = 0; }
+      applyLightboxZoom();
+    }
+
+    function bindLightboxGestures() {
+      const stage = document.getElementById('lightbox-stage');
+      if (!stage || stage._lbBound) return;
+      stage._lbBound = true;
+      stage.addEventListener('wheel', (e) => {
+        if (!document.getElementById('photo-lightbox').classList.contains('on')) return;
+        e.preventDefault();
+        lightboxZoomAt(e.deltaY < 0 ? 1.12 : 0.9, e.clientX, e.clientY, stage);
+      }, { passive: false });
+      stage.addEventListener('pointerdown', (e) => {
+        if (e.pointerType === 'touch' && stage._touches && stage._touches > 1) return;
+        lbZoom.dragging = true;
+        lbZoom.moved = false;
+        lbZoom.sx = e.clientX; lbZoom.sy = e.clientY;
+        lbZoom.ox = lbZoom.x; lbZoom.oy = lbZoom.y;
+        stage.classList.add('dragging');
+        try { stage.setPointerCapture(e.pointerId); } catch (err) {}
+      });
+      stage.addEventListener('pointermove', (e) => {
+        if (!lbZoom.dragging || lbZoom.pinch) return;
+        const dx = e.clientX - lbZoom.sx, dy = e.clientY - lbZoom.sy;
+        if (Math.abs(dx) + Math.abs(dy) > 6) lbZoom.moved = true;
+        if (lbZoom.scale <= 1) return;
+        lbZoom.x = lbZoom.ox + dx;
+        lbZoom.y = lbZoom.oy + dy;
+        applyLightboxZoom();
+      });
+      const endDrag = () => {
+        lbZoom.dragging = false;
+        stage.classList.remove('dragging');
+      };
+      stage.addEventListener('pointerup', endDrag);
+      stage.addEventListener('pointercancel', endDrag);
+      stage.addEventListener('dblclick', (e) => {
+        e.preventDefault();
+        if (lbZoom.scale > 1) resetLightboxZoom();
+        else lightboxZoomAt(2.4, e.clientX, e.clientY, stage);
+      });
+      stage.addEventListener('touchstart', (e) => {
+        if (e.touches.length === 2) {
+          lbZoom.pinch = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+          lbZoom.dragging = false;
+        }
+      }, { passive: true });
+      stage.addEventListener('touchmove', (e) => {
+        if (e.touches.length !== 2 || !lbZoom.pinch) return;
+        e.preventDefault();
+        const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+        const cx = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+        const cy = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+        lightboxZoomAt(dist / lbZoom.pinch, cx, cy, stage);
+        lbZoom.pinch = dist;
+      }, { passive: false });
+      stage.addEventListener('touchend', (e) => {
+        if (lbZoom.pinch && (!e.touches || e.touches.length < 2)) lbZoom.pinch = 0;
+      });
+    }
+
     function openPhotoLightbox() {
       const s = sightings.find(x => x.id === currentDetailId);
       if (!s) return;
@@ -3461,8 +3602,15 @@
       const box = document.getElementById('photo-lightbox');
       const img = document.getElementById('lightbox-img');
       if (!box || !img) return;
+      const n = taxName(s.species_code);
       img.src = src;
-      img.alt = taxName(s.species_code).comName || '';
+      img.alt = n.comName || '';
+      document.getElementById('lightbox-name').textContent = n.comName || 'Sighting';
+      const when = s.date ? fmtShortDate(s.date) : '';
+      const where = placeLabel(s) || s.state || '';
+      document.getElementById('lightbox-meta').textContent = [when, where].filter(Boolean).join('  ·  ');
+      resetLightboxZoom();
+      bindLightboxGestures();
       box.classList.add('on');
     }
 
@@ -3471,6 +3619,7 @@
       const img = document.getElementById('lightbox-img');
       if (box) box.classList.remove('on');
       if (img) img.removeAttribute('src');
+      resetLightboxZoom();
     }
 
     function closeDetailModal(opts) {
@@ -3942,11 +4091,18 @@
       }
       persistSightings();
       rememberLastLogLocation(payload);
+      const savedId = editingId || (sightings[sightings.length - 1] && sightings[sightings.length - 1].id);
       closeUploadModal();
       refreshUI();
       renderLifeList();
       renderGallery();
       renderRadar();
+      if (savedId) {
+        currentDetailId = savedId;
+        switchTab('map');
+        if (typeof setMapMode === 'function') setMapMode('photos');
+        setTimeout(() => flyToSightingOnMap(savedId), 160);
+      }
     }
 
     function openUploadModal() {
@@ -4006,6 +4162,7 @@
       renderMapMarkers();
       updateRegionalHUD();
       persistSightings();
+      refreshExportStamp();
     }
 
     async function loadData() {
