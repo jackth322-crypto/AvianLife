@@ -1252,13 +1252,14 @@ function exportLogs() {
         zoomDelta: 1,
         bounceAtZoomLimits: false,
         inertia: true,
-        inertiaDeceleration: 2500,
-        inertiaMaxSpeed: 1800,
-        easeLinearity: 0.25,
+        inertiaDeceleration: 1400,
+        inertiaMaxSpeed: 3500,
+        easeLinearity: 0.35,
         wheelPxPerZoomLevel: 60
       }).setView([36.0999, -80.2442], 11);
       applyMapTiles();
       bindMapLogGestures();
+      bindPinchZoomInertia();
       const clusterOpts = { showCoverageOnHover: false, maxClusterRadius: 32, spiderfyOnMaxZoom: true, disableClusteringAtZoom: 18, iconCreateFunction: rarityClusterIcon };
       markersLayer = L.markerClusterGroup(clusterOpts).addTo(mapInstance);
       huntLayer = L.markerClusterGroup(clusterOpts).addTo(mapInstance);
@@ -1294,12 +1295,25 @@ function exportLogs() {
         : 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
     }
 
+    const PrefetchTileLayer = L.TileLayer.extend({
+      _getTiledPixelBounds: function (center) {
+        const bounds = L.TileLayer.prototype._getTiledPixelBounds.call(this, center);
+        if (!this._map) return bounds;
+        const pad = this.options.prefetchPad == null ? 1.25 : this.options.prefetchPad;
+        const extra = this._map.getSize().multiplyBy(pad);
+        return new L.Bounds(bounds.min.subtract(extra), bounds.max.add(extra));
+      }
+    });
+    function prefetchTileLayer(url, opts) {
+      return new PrefetchTileLayer(url, opts);
+    }
+
     function applyMapTiles() {
       const opts = darkTiles
-        ? { maxZoom: 16, attribution: 'Tiles &copy; Esri', keepBuffer: 6, updateWhenZooming: false, updateWhenIdle: false, className: 'be-tiles' }
-        : { maxZoom: 19, attribution: '&copy; OSM', keepBuffer: 6, updateWhenZooming: false, updateWhenIdle: false, className: 'be-tiles' };
+        ? { maxZoom: 16, attribution: 'Tiles &copy; Esri', keepBuffer: 14, updateWhenZooming: false, updateWhenIdle: false, prefetchPad: 1.25, className: 'be-tiles' }
+        : { maxZoom: 19, attribution: '&copy; OSM', keepBuffer: 14, updateWhenZooming: false, updateWhenIdle: false, prefetchPad: 1.25, className: 'be-tiles' };
       if (baseLayer && mapInstance) mapInstance.removeLayer(baseLayer);
-      baseLayer = L.tileLayer(tileUrl(), opts);
+      baseLayer = prefetchTileLayer(tileUrl(), opts);
       if (mapInstance) {
         baseLayer.addTo(mapInstance).bringToBack();
         mapInstance.getContainer().classList.toggle('be-dark', !!darkTiles);
