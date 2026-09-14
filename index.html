@@ -31,7 +31,17 @@
     /* Keep the Leaflet map sized while other tabs are open so fitBounds can run. */
     #view-map { display: block !important; visibility: hidden; pointer-events: none; z-index: 0; }
     #view-map.on { visibility: visible; pointer-events: auto; z-index: 1; }
-    #map { height: 100%; width: 100%; background: #111; touch-action: none; }
+    #map { height: 100%; width: 100%; background: #d7d2c8; touch-action: none; }
+    .leaflet-container { background: #d7d2c8; }
+    .leaflet-container.be-dark { background: #2a2a2a; }
+    .leaflet-fade-anim .leaflet-tile { will-change: auto; }
+    #log-here-tip {
+      display: none; position: absolute; z-index: 3200; min-width: 188px;
+      background: rgba(28,25,23,.96); border: 1px solid #44403c; border-radius: 12px;
+      padding: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.4);
+    }
+    #log-here-tip.on { display: block; }
+    #log-here-tip .btn-em { width: 100%; margin-top: 8px; }
     .overlay-top { position: absolute; top: 12px; left: 12px; z-index: 2000; pointer-events: auto; }
     .overlay-right { position: absolute; top: 12px; right: 12px; z-index: 2000; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; pointer-events: auto; }
     .locate-btn { width: 36px; height: 36px; border-radius: 50%; background: rgba(28,25,23,.94); border: 1px solid #44403c; color: #34d399; font-size: 16px; }
@@ -477,6 +487,11 @@
       </div>
       <div class="center-dot"></div>
       <div id="map"></div>
+      <div id="log-here-tip">
+        <div class="muted">Log a sighting here?</div>
+        <div class="mono" id="log-here-coords" style="margin-top:4px"></div>
+        <button type="button" class="btn-em" id="log-here-go">Log this point</button>
+      </div>
       <div id="heat-scrub">
         <div class="heat-scrub-top">
           <span id="heat-scrub-label">January</span>
@@ -1230,13 +1245,17 @@ function exportLogs() {
       mapInstance = L.map('map', {
         zoomControl: false,
         preferCanvas: false,
-        fadeAnimation: true,
+        fadeAnimation: false,
         markerZoomAnimation: false,
         zoomAnimation: true,
-        zoomSnap: 0.25,
-        zoomDelta: 0.5,
+        zoomSnap: 0,
+        zoomDelta: 1,
         bounceAtZoomLimits: false,
-        wheelPxPerZoomLevel: 120
+        inertia: true,
+        inertiaDeceleration: 2500,
+        inertiaMaxSpeed: 1800,
+        easeLinearity: 0.25,
+        wheelPxPerZoomLevel: 60
       }).setView([36.0999, -80.2442], 11);
       applyMapTiles();
       bindMapLogGestures();
@@ -1277,11 +1296,15 @@ function exportLogs() {
 
     function applyMapTiles() {
       const opts = darkTiles
-        ? { maxZoom: 16, attribution: 'Tiles &copy; Esri', keepBuffer: 6, updateWhenZooming: false, updateWhenIdle: true }
-        : { maxZoom: 18, attribution: '&copy; OSM', keepBuffer: 6, updateWhenZooming: false, updateWhenIdle: true };
+        ? { maxZoom: 16, attribution: 'Tiles &copy; Esri', keepBuffer: 6, updateWhenZooming: false, updateWhenIdle: false, className: 'be-tiles' }
+        : { maxZoom: 19, attribution: '&copy; OSM', keepBuffer: 6, updateWhenZooming: false, updateWhenIdle: false, className: 'be-tiles' };
       if (baseLayer && mapInstance) mapInstance.removeLayer(baseLayer);
       baseLayer = L.tileLayer(tileUrl(), opts);
-      if (mapInstance) baseLayer.addTo(mapInstance).bringToBack();
+      if (mapInstance) {
+        baseLayer.addTo(mapInstance).bringToBack();
+        mapInstance.getContainer().classList.toggle('be-dark', !!darkTiles);
+        mapInstance.getContainer().style.background = darkTiles ? '#2a2a2a' : '#d7d2c8';
+      }
       if (pickerMap) {
         pickerMap.eachLayer(l => { if (l instanceof L.TileLayer) pickerMap.removeLayer(l); });
         L.tileLayer(tileUrl(), opts).addTo(pickerMap);
@@ -4165,10 +4188,30 @@ function exportLogs() {
     function bindMapLogGestures() {
       if (!mapInstance) return;
       const el = mapInstance.getContainer();
-      mapInstance.on('contextmenu', function (e) {
-        L.DomEvent.preventDefault(e.originalEvent || e);
-        if (e.latlng) offerLogAt(e.latlng.lat, e.latlng.lng);
+      const tip = document.getElementById('log-here-tip');
+      const go = document.getElementById('log-here-go');
+      el.addEventListener('contextmenu', function (ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        const ll = mapInstance.mouseEventToLatLng(ev);
+        offerLogAt(ll.lat, ll.lng, ev.clientX, ev.clientY);
       });
+      if (go) {
+        go.onclick = function (ev) {
+          ev.preventDefault();
+          ev.stopPropagation();
+          const lat = Number(tip && tip.dataset.lat);
+          const lng = Number(tip && tip.dataset.lng);
+          hideLogHereTip();
+          openUploadFromMap(lat, lng);
+        };
+      }
+      document.addEventListener('click', function (ev) {
+        if (!tip || !tip.classList.contains('on')) return;
+        if (tip.contains(ev.target)) return;
+        hideLogHereTip();
+      });
+      mapInstance.on('movestart zoomstart', hideLogHereTip);
       let pressTimer = 0;
       let pressPt = null;
       const clearPress = () => { clearTimeout(pressTimer); pressTimer = 0; pressPt = null; };
@@ -4178,19 +4221,46 @@ function exportLogs() {
         pressPt = { x: t.clientX, y: t.clientY };
         pressTimer = setTimeout(() => {
           if (!pressPt || !mapInstance) return;
-          const ll = mapInstance.mouseEventToLatLng({ clientX: pressPt.x, clientY: pressPt.y });
+          const x = pressPt.x, y = pressPt.y;
+          const ll = mapInstance.mouseEventToLatLng({ clientX: x, clientY: y });
           clearPress();
           if (navigator.vibrate) try { navigator.vibrate(12); } catch (err) {}
-          offerLogAt(ll.lat, ll.lng);
-        }, 520);
+          offerLogAt(ll.lat, ll.lng, x, y);
+        }, 550);
       }, { passive: true });
       el.addEventListener('touchmove', function (ev) {
         if (!pressPt || !ev.touches[0]) return;
         const t = ev.touches[0];
-        if (Math.hypot(t.clientX - pressPt.x, t.clientY - pressPt.y) > 14) clearPress();
+        if (Math.hypot(t.clientX - pressPt.x, t.clientY - pressPt.y) > 16) clearPress();
       }, { passive: true });
       el.addEventListener('touchend', clearPress, { passive: true });
       el.addEventListener('touchcancel', clearPress, { passive: true });
+    }
+
+    function hideLogHereTip() {
+      const tip = document.getElementById('log-here-tip');
+      if (tip) tip.classList.remove('on');
+    }
+
+    function offerLogAt(lat, lng, clientX, clientY) {
+      if (!mapInstance || !Number.isFinite(Number(lat)) || !Number.isFinite(Number(lng))) return;
+      const tip = document.getElementById('log-here-tip');
+      const coords = document.getElementById('log-here-coords');
+      if (!tip) return;
+      tip.dataset.lat = String(lat);
+      tip.dataset.lng = String(lng);
+      if (coords) coords.textContent = Number(lat).toFixed(5) + ', ' + Number(lng).toFixed(5);
+      const host = document.getElementById('view-map');
+      const box = host.getBoundingClientRect();
+      let x = (clientX != null ? clientX : box.left + box.width / 2) - box.left + 10;
+      let y = (clientY != null ? clientY : box.top + box.height / 2) - box.top + 10;
+      tip.classList.add('on');
+      const tw = tip.offsetWidth || 200;
+      const th = tip.offsetHeight || 110;
+      if (x + tw > box.width - 8) x = Math.max(8, box.width - tw - 8);
+      if (y + th > box.height - 8) y = Math.max(8, box.height - th - 8);
+      tip.style.left = x + 'px';
+      tip.style.top = y + 'px';
     }
 
     function openUploadFromMap(lat, lng) {
