@@ -1250,12 +1250,12 @@ function exportLogs() {
         zoomAnimation: true,
         zoomSnap: 0,
         zoomDelta: 1,
-        bounceAtZoomLimits: false,
+        bounceAtZoomLimits: true,
         inertia: true,
-        inertiaDeceleration: 2500,
+        inertiaDeceleration: 1500,
         inertiaMaxSpeed: 1800,
         easeLinearity: 0.25,
-        wheelPxPerZoomLevel: 60
+        wheelPxPerZoomLevel: 45
       }).setView([36.0999, -80.2442], 11);
       applyMapTiles();
       bindMapLogGestures();
