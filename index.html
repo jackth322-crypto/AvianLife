@@ -151,6 +151,25 @@
     .brand { display: flex; gap: 8px; align-items: center; }
     .logo { width: 28px; height: 28px; border-radius: 8px; background: var(--bg); border: 1px solid var(--em-dim); display: flex; align-items: center; justify-content: center; overflow: hidden; }
     .logo svg { width: 22px; height: 22px; display: block; }
+    .logo-img, .wordmark-img { display: none; }
+    html[data-theme="light"] .brand,
+    html[data-theme="dark"] .brand { gap: 4px; }
+    html[data-theme="light"] .logo,
+    html[data-theme="dark"] .logo {
+      width: 44px; height: 44px; background: transparent; border: 0; border-radius: 0; overflow: visible;
+    }
+    html[data-theme="light"] .logo svg,
+    html[data-theme="dark"] .logo svg { display: none; }
+    html[data-theme="light"] .logo-img-light,
+    html[data-theme="dark"] .logo-img-dark { display: block; width: 44px; height: 44px; object-fit: contain; }
+    html[data-theme="light"] .brand-copy h1,
+    html[data-theme="light"] .brand-copy .sub,
+    html[data-theme="dark"] .brand-copy h1,
+    html[data-theme="dark"] .brand-copy .sub { display: none; }
+    html[data-theme="light"] .wordmark-img-light,
+    html[data-theme="dark"] .wordmark-img-dark {
+      display: block; height: 44px; width: auto; max-width: 320px; object-fit: contain; transform: translateY(3px);
+    }
     h1 { font-size: 16px; margin: 0; }
     .sub { font-size: 10px; color: var(--muted); }
     .badge { font-size: 9px; font-family: ui-monospace, monospace; border: 1px solid var(--em-dim); background: var(--em-bg); color: var(--em3); padding: 1px 4px; border-radius: 4px; }
@@ -324,8 +343,20 @@
     .pop-seg button { flex: 1; font-size: 10px; padding: 3px 6px; }
     .pop-pager { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 6px; color: var(--muted); font-size: 11px; font-weight: 700; }
     .pop-pager button { background: none; border: 0; color: var(--text-2); font-size: 16px; line-height: 1; padding: 2px 6px; cursor: pointer; }
-    .chit-focus { filter: drop-shadow(0 0 0 2px var(--photo)) drop-shadow(0 0 0 4px var(--em3)); }
-    .chit-focus.leaflet-interactive { stroke: var(--em3); stroke-width: 3; }
+    .chit-focus { z-index: 1200 !important; }
+    .bird-chit.chit-focus img {
+      transform: scale(1.28);
+      transform-origin: center center;
+    }
+    .leaflet-marker-icon.chit-focus > span {
+      box-shadow: 0 0 0 2px #fff, 0 0 0 5px var(--em3), 0 0 12px rgba(52,211,153,.8);
+      transform: scale(1.35);
+    }
+    path.chit-focus.leaflet-interactive {
+      stroke: #fff !important;
+      stroke-width: 4 !important;
+      filter: drop-shadow(0 0 5px var(--em3));
+    }
     #region-stats { font-family: ui-monospace, monospace; color: var(--em3); font-weight: 700; font-size: 12px; }
     .bar { height: 4px; background: var(--line); border-radius: 99px; overflow: hidden; margin-top: 6px; }
     .bar > div { height: 100%; width: 0; background: var(--em2); }
@@ -727,10 +758,14 @@
           <circle cx="17.2" cy="15" r="1.3" fill="var(--logo-eye)"/>
           <path d="M7 14.5c3-4 7-6 9-6" stroke="var(--em2)" stroke-width="1.4" stroke-linecap="round"/>
         </svg>
+        <img class="logo-img logo-img-light" src="light_mode_icon-removebg-preview.png" alt="" />
+        <img class="logo-img logo-img-dark" src="dark_mode_icon-removebg-preview.png" alt="" />
       </div>
-      <div>
+      <div class="brand-copy">
         <h1>BirdsEye</h1>
         <div class="sub">Find what's flying.</div>
+        <img class="wordmark-img wordmark-img-light" src="light_mode_wordmark-removebg-preview.png" alt="birdseye" />
+        <img class="wordmark-img wordmark-img-dark" src="dark_mode_wordmark-removebg-preview.png" alt="birdseye" />
       </div>
     </div>
     <div style="display:flex;gap:8px;align-items:center">
@@ -908,7 +943,7 @@
               </div>
             </div>
             <div class="gallery-side">
-              <button type="button" class="btn-report" onclick="openFieldReportModal()">+ Field Report</button>
+              <button type="button" class="btn-report" onclick="openFieldReportModal()">+ Field Reel</button>
               <div id="gallery-spark" class="spark"></div>
             </div>
           </div>
@@ -1111,7 +1146,7 @@
 
   <div id="report-modal" class="modal">
     <div class="sheet">
-      <div class="sheet-h"><strong>Field Report</strong><button class="x" type="button" onclick="closeFieldReportModal()">✕</button></div>
+      <div class="sheet-h"><strong>Field Reel</strong><button class="x" type="button" onclick="closeFieldReportModal()">✕</button></div>
       <div class="sheet-b">
         <p class="hint">Pick a date and photos, then save a JPG you can share from your phone.</p>
         <div class="field">
@@ -1358,6 +1393,9 @@
     let hotspotCardView = 'recent';
     let hotspotFocusMk = null;
     let skipHuntMove = false;
+    let huntCardOpen = false;
+    let huntSpiderOpen = false;
+    function huntUiHold() { return huntCardOpen || huntSpiderOpen; }
     let focusMarker = null;
     let mapInstance = null;
     let markersLayer = null;
@@ -1702,11 +1740,14 @@ function exportLogs() {
         clearTimeout(moveTimer);
         clearTimeout(huntTimer);
       });
+      mapInstance.on('popupopen', () => { huntCardOpen = true; });
+      mapInstance.on('popupclose', () => { huntCardOpen = false; });
       mapInstance.on('moveend', () => {
         clearTimeout(moveTimer);
         moveTimer = setTimeout(() => {
-          resolveStateLocation();
+          if (!huntUiHold()) resolveStateLocation();
           if (skipHuntMove) { skipHuntMove = Math.max(0, skipHuntMove - 1); return; }
+          if (huntUiHold()) return;
           if (mapMode === 'hunt' && !radiusLocked && currentSpeciesFilter === 'all' && !rarityWantsStatewide()) scheduleHunt();
         }, 1400);
       });
@@ -2001,8 +2042,14 @@ function exportLogs() {
     function highlightCycleMarker(marker) {
       clearChitFocus();
       if (!marker) return;
-      const el = marker.getElement && marker.getElement();
-      if (el) el.classList.add('chit-focus');
+      const paint = function () {
+        const el = marker.getElement && marker.getElement();
+        if (!el) return;
+        el.classList.add('chit-focus');
+        el.style.zIndex = '1200';
+      };
+      paint();
+      requestAnimationFrame(paint);
     }
 
     function clusterCardAnchor(peers) {
@@ -2100,8 +2147,12 @@ function exportLogs() {
 
     function bindClusterGroup(group) {
       if (!group) return;
-      group.on('spiderfied', function (e) { clusterPeers = e.markers || []; });
-      group.on('unspiderfied', function () { clusterPeers = []; closeFixedCycle(); });
+      group.on('spiderfied', function (e) {
+        clusterPeers = e.markers || [];
+        huntSpiderOpen = true;
+        if (clusterFocus) setTimeout(function () { highlightCycleMarker(clusterFocus); }, 30);
+      });
+      group.on('unspiderfied', function () { huntSpiderOpen = false; clusterPeers = []; closeFixedCycle(); });
       group.on('clusterclick', function (e) {
         if (!mapInstance) return;
         const cluster = e.layer;
@@ -3081,6 +3132,7 @@ function exportLogs() {
     }
 
     function scheduleHunt() {
+      if (huntUiHold()) return;
       setHuntBusy(true);
       clearTimeout(huntTimer);
       huntTimer = setTimeout(loadHuntData, 1400);
@@ -3148,6 +3200,7 @@ function exportLogs() {
     }
 
     async function loadHuntData(origin) {
+      if (huntUiHold()) { setHuntBusy(false); return; }
       const scope = origin === 'radar' ? radarScope : (origin || (mapMode === 'hunt' ? 'map' : radarScope));
       if (scope === 'state' && currentSpeciesFilter === 'all') return;
       if (!getEbirdKey()) return;
@@ -3302,6 +3355,7 @@ function exportLogs() {
     }
 
     function renderHuntMap() {
+      if (huntUiHold()) return;
       if (!huntLayer || !mapInstance) return;
       markersLayer.clearLayers();
       huntLayer.clearLayers();
@@ -4171,8 +4225,8 @@ function exportLogs() {
       ].join('');
       const parts = [];
       parts.push('<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">');
-      parts.push('<title>Field Report - ' + escHtml(pretty) + '</title><style>' + css + '<' + '/style><' + '/head><body><div class="wrap">');
-      parts.push('<div class="kicker">BirdsEye Field Report</div>');
+      parts.push('<title>Field Reel - ' + escHtml(pretty) + '</title><style>' + css + '<' + '/style><' + '/head><body><div class="wrap">');
+      parts.push('<div class="kicker">BirdsEye Field Reel</div>');
       parts.push('<h1>' + escHtml(pretty) + '</h1>');
       if (places.length) parts.push('<p class="lead">' + escHtml(places.join(' · ')) + '</p>');
       parts.push('<div class="stats">');
@@ -4263,15 +4317,17 @@ function exportLogs() {
       const imgs = [];
       for (let i = 0; i < rows.length; i++) imgs.push(await reportLoadImg(rows[i].photo_url));
 
-      const W = 1080;
-      const pad = 48;
+      const W = 720;
+      const pad = 38;
       const inner = W - pad * 2;
-      const photoSize = Math.min(640, inner);
+      const photoSize = inner;
+      const colW = 118;
+      const perRow = Math.max(1, Math.floor(inner / colW));
       let y = 56;
       y += 28 + 44;
       y += 36;
       y += 110;
-      y += 36 + Math.ceil(rows.length / 6) * 140 + 16;
+      y += 36 + Math.ceil(rows.length / perRow) * 156 + 16;
       y += 36;
       rows.forEach((s, i) => {
         const im = imgs[i];
@@ -4280,7 +4336,7 @@ function exportLogs() {
       });
       y += 36 + species.length * 56 + 40 + notes.length * 40 + 80;
       const H = Math.min(8192, Math.max(1400, y));
-      const canvas = document.createElement('canvas');
+      let canvas = document.createElement('canvas');
       canvas.width = W;
       canvas.height = H;
       const ctx = canvas.getContext('2d');
@@ -4291,12 +4347,15 @@ function exportLogs() {
       ctx.fillStyle = '#047857';
       ctx.font = '800 18px system-ui,sans-serif';
       ctx.letterSpacing = '2px';
-      ctx.fillText('BIRDSEYE FIELD REPORT', pad, cy);
+      ctx.fillText('BIRDSEYE FIELD REEL', pad, cy);
       cy += 42;
       ctx.fillStyle = '#1c1917';
-      ctx.font = '800 42px system-ui,sans-serif';
-      ctx.fillText(pretty, pad, cy);
-      cy += 28;
+      ctx.font = '800 32px system-ui,sans-serif';
+      canvasWrap(ctx, pretty, inner).forEach(line => {
+        ctx.fillText(line, pad, cy);
+        cy += 38;
+      });
+      cy += 4;
       if (places.length) {
         ctx.fillStyle = '#57534e';
         ctx.font = '400 22px system-ui,sans-serif';
@@ -4332,37 +4391,38 @@ function exportLogs() {
 
       ctx.fillStyle = '#1c1917';
       ctx.font = '700 24px system-ui,sans-serif';
-      ctx.fillText('Identified', pad, cy);
+      ctx.fillText('Species', pad, cy);
       cy += 18;
-      const chit = 92, gap = 18;
+      const chit = 72;
       let cx = pad;
-      const chitTop = cy;
       rows.forEach((s, i) => {
-        if (cx + chit > pad + inner) { cx = pad; cy += chit + 48; }
+        if (cx + colW > pad + inner + 1) { cx = pad; cy += chit + 58; }
         const im = imgs[i];
+        const mid = cx + colW / 2;
         ctx.save();
         ctx.beginPath();
-        ctx.arc(cx + chit / 2, cy + chit / 2, chit / 2, 0, Math.PI * 2);
+        ctx.arc(mid, cy + chit / 2, chit / 2, 0, Math.PI * 2);
         ctx.fillStyle = '#eceae6';
         ctx.fill();
         ctx.clip();
-        if (im) ctx.drawImage(im, cx, cy, chit, chit);
+        if (im) ctx.drawImage(im, mid - chit / 2, cy, chit, chit);
         ctx.restore();
         ctx.fillStyle = '#44403c';
-        ctx.font = '600 14px system-ui,sans-serif';
+        ctx.font = '600 13px system-ui,sans-serif';
         ctx.textAlign = 'center';
         const nm = taxName(s.species_code).comName;
-        ctx.fillText(nm.length > 16 ? nm.slice(0, 15) + '…' : nm, cx + chit / 2, cy + chit + 18);
+        const lines = canvasWrap(ctx, nm, colW - 8).slice(0, 2);
+        lines.forEach((line, li) => ctx.fillText(line, mid, cy + chit + 16 + li * 15));
         const badge = reportBadgeText(s, day);
         if (badge) {
           ctx.fillStyle = badge === 'Lifer' ? '#047857' : '#b45309';
           ctx.font = '800 11px system-ui,sans-serif';
-          ctx.fillText(badge.toUpperCase(), cx + chit / 2, cy + chit + 34);
+          ctx.fillText(badge.toUpperCase(), mid, cy + chit + 16 + lines.length * 15 + 2);
         }
         ctx.textAlign = 'left';
-        cx += chit + gap;
+        cx += colW;
       });
-      cy += chit + 56;
+      cy += chit + 96;
 
       ctx.fillStyle = '#1c1917';
       ctx.font = '700 24px system-ui,sans-serif';
@@ -4379,33 +4439,34 @@ function exportLogs() {
           if (pw > inner) { pw = inner; ph = pw * (im.naturalHeight / im.naturalWidth); }
         }
         if (cy + ph + 120 > H - 40) break;
+        const cardX = pad + (inner - pw) / 2;
         ctx.fillStyle = '#fff';
-        canvasRoundRect(ctx, pad, cy, inner, ph + 88, 20);
+        canvasRoundRect(ctx, cardX, cy, pw, ph + 88, 16);
         ctx.fill();
         ctx.save();
         ctx.beginPath();
-        ctx.rect(pad, cy, inner, ph);
+        canvasRoundRect(ctx, cardX, cy, pw, ph, 16);
         ctx.clip();
         ctx.fillStyle = '#eceae6';
-        ctx.fillRect(pad, cy, inner, ph);
-        if (im) ctx.drawImage(im, pad + (inner - pw) / 2, cy, pw, ph);
+        ctx.fillRect(cardX, cy, pw, ph);
+        if (im) ctx.drawImage(im, cardX, cy, pw, ph);
         ctx.restore();
         let ty = cy + ph + 28;
         ctx.fillStyle = '#1c1917';
         ctx.font = '700 24px system-ui,sans-serif';
-        ctx.fillText(n.comName, pad + 16, ty);
+        ctx.fillText(n.comName, cardX + 14, ty);
         const badge = reportBadgeText(s, day);
-        if (badge) canvasBadge(ctx, badge, pad + 24 + ctx.measureText(n.comName).width, ty - 2);
+        if (badge) canvasBadge(ctx, badge, cardX + 22 + ctx.measureText(n.comName).width, ty - 2);
         ty += 24;
         ctx.fillStyle = '#78716c';
-        ctx.font = 'italic 18px system-ui,sans-serif';
-        ctx.fillText(n.sciName || '', pad + 16, ty);
+        ctx.font = 'italic 16px system-ui,sans-serif';
+        ctx.fillText(n.sciName || '', cardX + 14, ty);
         ty += 22;
         const where = bezelPlace(s) || placeLabel(s) || '';
         if (where) {
           ctx.fillStyle = '#57534e';
-          ctx.font = '400 18px system-ui,sans-serif';
-          ctx.fillText(where, pad + 16, ty);
+          ctx.font = '400 16px system-ui,sans-serif';
+          ctx.fillText(where, cardX + 14, ty);
         }
         cy += ph + 100;
       }
@@ -4419,7 +4480,7 @@ function exportLogs() {
       cy += 36;
       ctx.fillStyle = '#1c1917';
       ctx.font = '700 24px system-ui,sans-serif';
-      ctx.fillText('Species', pad + 16, cy);
+      ctx.fillText('Occurrence', pad + 16, cy);
       cy += 20;
       species.forEach(code => {
         const n = taxName(code);
@@ -4436,7 +4497,7 @@ function exportLogs() {
         ctx.font = 'italic 16px system-ui,sans-serif';
         ctx.fillText((n.sciName || '') + '  ·  ' + count + (count === 1 ? ' photo' : ' photos'), pad + 42, cy + 26);
         const monthly = (speciesFromState(code) || {}).monthly || [];
-        const sx = pad + inner - 168;
+        const sx = pad + inner - 172;
         monthly.slice(0, 12).forEach((v, mi) => {
           const h = 4 + (v || 0) * 18;
           ctx.fillStyle = (v || 0) >= 0.45 ? '#059669' : (v || 0) >= 0.15 ? '#c2410c' : '#a8a29e';
@@ -4464,13 +4525,31 @@ function exportLogs() {
           cy += 8;
         });
       }
-      cy += 12;
+      cy += 8;
       ctx.fillStyle = '#78716c';
       ctx.font = '400 16px system-ui,sans-serif';
-      ctx.fillText('Generated from BirdsEye  ·  ' + pretty + '  ·  ' + species.length + ' species, ' + lifers.length + ' lifers', pad, Math.min(H - 24, cy));
+      ctx.fillText('Generated from BirdsEye  ·  ' + pretty, pad, cy);
+      const usedH = Math.min(H, Math.ceil(cy + 28));
+      if (usedH < H) {
+        const trimmed = document.createElement('canvas');
+        trimmed.width = W;
+        trimmed.height = usedH;
+        trimmed.getContext('2d').drawImage(canvas, 0, 0);
+        canvas = trimmed;
+      }
 
       return await new Promise((resolve, reject) => {
-        canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('Could not write image')), 'image/jpeg', 0.88);
+        const finish = blob => blob ? resolve(blob) : reject(new Error('Could not write image'));
+        if (canvas.toBlob) canvas.toBlob(finish, 'image/jpeg', 0.88);
+        else {
+          try {
+            const url = canvas.toDataURL('image/jpeg', 0.88);
+            const bin = atob(url.split(',')[1]);
+            const arr = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+            finish(new Blob([arr], { type: 'image/jpeg' }));
+          } catch (err) { reject(err); }
+        }
       });
     }
     function isMobileReport() {
@@ -4478,20 +4557,21 @@ function exportLogs() {
     }
     async function downloadFieldReport() {
       const day = (document.getElementById('report-date') || {}).value || '';
-      const rows = reportDayRows().filter(s => reportPickIds.has(s.id));
+      let rows = reportDayRows().filter(s => reportPickIds.has(s.id));
       if (!day) { alert('Pick a date first.'); return; }
       if (!rows.length) { alert('Select at least one photo.'); return; }
+      if (rows.length > 20) rows = rows.slice(0, 20);
       const btn = document.getElementById('btn-download-report');
       const prev = btn ? btn.textContent : '';
       if (btn) { btn.textContent = 'Building image…'; btn.disabled = true; }
       try {
         const blob = await buildFieldReportJpeg(day, rows);
-        const filename = 'birdseye-field-report-' + day + '.jpg';
+        const filename = 'birdseye-field-reel-' + day + '.jpg';
         if (isMobileReport()) {
           try {
             const file = new File([blob], filename, { type: 'image/jpeg' });
             if (navigator.canShare && navigator.canShare({ files: [file] })) {
-              await navigator.share({ files: [file], title: filename, text: 'BirdsEye field report' });
+              await navigator.share({ files: [file], title: filename, text: 'BirdsEye Field Reel' });
               return;
             }
           } catch (e) {
