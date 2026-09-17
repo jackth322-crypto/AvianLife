@@ -5684,28 +5684,67 @@ function exportLogs() {
       return '';
     }
 
+    function prettyLookupState(raw) {
+      const t = String(raw || '').trim();
+      if (!t) return '';
+      if (STATE_CODES[t]) return t;
+      const up = t.toUpperCase();
+      const iso = up.replace(/^US-/, '');
+      const names = Object.keys(STATE_CODES);
+      for (let i = 0; i < names.length; i++) {
+        const code = STATE_CODES[names[i]];
+        if (code === 'US-' + iso || code === up || names[i].toUpperCase() === up) return names[i];
+      }
+      return t;
+    }
+
     function countyFromNominatim(data) {
       const a = data && data.address;
       if (!a) return '';
       return formatCounty(a.county || a.municipality || a.city_district || '');
     }
 
+    function localStateGuess(lat, lng) {
+      const poly = stateFromPolygons(Number(lat), Number(lng));
+      if (poly) return poly;
+      const dc = STATE_BOUNDS['District of Columbia'];
+      if (dc && pointInBox(lat, lng, dc)) return 'District of Columbia';
+      const hits = statesContainingPoint(lat, lng);
+      return hits.length === 1 ? hits[0] : (hits[0] || '');
+    }
+
     async function lookupCounty(lat, lng) {
-      const out = { county: '', state: '', city: '' };
+      const out = { county: '', state: localStateGuess(lat, lng), city: '' };
       try {
-        const res = await fetch('https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=' + lat + '&longitude=' + lng + '&localityLanguage=en');
+        const res = await fetch('https://geo.fcc.gov/api/census/area?lat=' + lat + '&lon=' + lng + '&format=json');
         const data = await res.json();
-        out.county = countyFromBigData(data);
-        out.state = data.principalSubdivision || '';
-        out.city = data.city || data.locality || '';
+        const row = data && data.results && data.results[0];
+        if (row) {
+          if (row.county_name) out.county = formatCounty(row.county_name);
+          if (row.state_name) out.state = prettyLookupState(row.state_name);
+        }
       } catch (e) {}
-      if (out.county) return out;
+      if (out.county && out.state) return out;
       try {
-        const res = await fetch('https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=' + lat + '&lon=' + lng + '&zoom=10&addressdetails=1', { headers: { 'Accept': 'application/json' } });
+        const res = await fetch('https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=' + lat + '&lon=' + lng + '&zoom=10&addressdetails=1');
         const data = await res.json();
-        out.county = countyFromNominatim(data);
-        if (!out.state) out.state = (data.address && (data.address.state || '')) || '';
-        if (!out.city) out.city = (data.address && (data.address.city || data.address.town || data.address.village || '')) || '';
+        const a = data && data.address;
+        if (a) {
+          if (!out.county) out.county = formatCounty(a.county || a.municipality || '');
+          if (!out.state) out.state = prettyLookupState(a.state || a['ISO3166-2-lvl4'] || '');
+          out.city = a.city || a.town || a.village || '';
+        }
+      } catch (e) {}
+      if (out.county && out.state) return out;
+      try {
+        const res = await fetch('https://photon.komoot.io/reverse?lon=' + lng + '&lat=' + lat);
+        const data = await res.json();
+        const p = data && data.features && data.features[0] && data.features[0].properties;
+        if (p) {
+          if (!out.county && p.county) out.county = formatCounty(p.county);
+          if (!out.state) out.state = prettyLookupState(p.state || '');
+          if (!out.city) out.city = p.city || p.locality || '';
+        }
       } catch (e) {}
       return out;
     }
@@ -5778,12 +5817,24 @@ function exportLogs() {
       setLocMode('last');
     }
 
-    async function reverseFillLocation(lat, lng) {
-      const info = await lookupCounty(lat, lng);
+    let pickerGeoTimer = 0;
+    let pickerMoveLock = false;
+    function reverseFillLocation(lat, lng) {
+      clearTimeout(pickerGeoTimer);
+      pickerGeoTimer = setTimeout(() => reverseFillLocationNow(lat, lng), 220);
+    }
+    async function reverseFillLocationNow(lat, lng) {
       const countyEl = document.getElementById('form-county');
       const locEl = document.getElementById('form-location');
       const stateEl = document.getElementById('form-state');
-      if (countyEl) countyEl.value = info.county || '';
+      const guess = localStateGuess(lat, lng);
+      if (stateEl && guess) stateEl.value = guess;
+      if (countyEl && !countyEl.value) countyEl.placeholder = 'Looking up…';
+      const info = await lookupCounty(lat, lng);
+      if (countyEl) {
+        countyEl.value = info.county || '';
+        countyEl.placeholder = 'County from GPS / map';
+      }
       if (stateEl && info.state) stateEl.value = info.state;
       if (locEl && locEl.value === 'Field Observation') locEl.value = '';
     }
@@ -5795,8 +5846,24 @@ function exportLogs() {
         pickerMap = L.map('picker-map', { zoomControl: false, preferCanvas: true }).setView([selectedCoords.lat, selectedCoords.lng], 13);
         L.tileLayer(tileUrl(), { maxZoom: 18 }).addTo(pickerMap);
         pickerMarker = L.marker([selectedCoords.lat, selectedCoords.lng], { draggable: true }).addTo(pickerMap);
-        pickerMarker.on('dragend', e => setFormCoordinates(e.target.getLatLng().lat, e.target.getLatLng().lng, true, true));
-        pickerMap.on('click', e => setFormCoordinates(e.latlng.lat, e.latlng.lng, true, true));
+        pickerMarker.on('dragend', e => {
+          const ll = e.target.getLatLng();
+          pickerMoveLock = true;
+          setFormCoordinates(ll.lat, ll.lng, true, true);
+          setTimeout(() => { pickerMoveLock = false; }, 250);
+        });
+        pickerMap.on('click', e => {
+          pickerMoveLock = true;
+          setFormCoordinates(e.latlng.lat, e.latlng.lng, true, true);
+          setTimeout(() => { pickerMoveLock = false; }, 250);
+        });
+        pickerMap.on('moveend', () => {
+          if (pickerMoveLock || !pickerMarker) return;
+          const c = pickerMap.getCenter();
+          pickerMarker.setLatLng(c);
+          selectedCoords = { lat: c.lat, lng: c.lng };
+          reverseFillLocation(c.lat, c.lng);
+        });
       }
       setTimeout(() => pickerMap && pickerMap.invalidateSize(), 120);
     }
