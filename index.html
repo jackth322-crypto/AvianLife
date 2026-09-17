@@ -5848,22 +5848,9 @@ function exportLogs() {
         pickerMarker = L.marker([selectedCoords.lat, selectedCoords.lng], { draggable: true }).addTo(pickerMap);
         pickerMarker.on('dragend', e => {
           const ll = e.target.getLatLng();
-          pickerMoveLock = true;
           setFormCoordinates(ll.lat, ll.lng, true, true);
-          setTimeout(() => { pickerMoveLock = false; }, 250);
         });
-        pickerMap.on('click', e => {
-          pickerMoveLock = true;
-          setFormCoordinates(e.latlng.lat, e.latlng.lng, true, true);
-          setTimeout(() => { pickerMoveLock = false; }, 250);
-        });
-        pickerMap.on('moveend', () => {
-          if (pickerMoveLock || !pickerMarker) return;
-          const c = pickerMap.getCenter();
-          pickerMarker.setLatLng(c);
-          selectedCoords = { lat: c.lat, lng: c.lng };
-          reverseFillLocation(c.lat, c.lng);
-        });
+        pickerMap.on('click', e => setFormCoordinates(e.latlng.lat, e.latlng.lng, true, true));
       }
       setTimeout(() => pickerMap && pickerMap.invalidateSize(), 120);
     }
