@@ -1113,7 +1113,7 @@
     <div class="sheet">
       <div class="sheet-h"><strong>Field Report</strong><button class="x" type="button" onclick="closeFieldReportModal()">✕</button></div>
       <div class="sheet-b">
-        <p class="hint">Pick a date, choose the photos to include, then download a shareable report.</p>
+        <p class="hint">Pick a date and photos, then save a JPG you can share from your phone.</p>
         <div class="field">
           <label>Date</label>
           <input type="date" id="report-date" onchange="loadReportPhotos()" />
@@ -1123,7 +1123,7 @@
       </div>
       <div class="sheet-f" style="gap:8px">
         <button class="ghost" type="button" id="btn-report-all" onclick="toggleAllReportPicks()">Select all</button>
-        <button class="btn-em" type="button" style="flex:1" onclick="downloadFieldReport()">Download report</button>
+        <button class="btn-em" type="button" style="flex:1" id="btn-download-report" onclick="downloadFieldReport()">Save JPG</button>
       </div>
     </div>
   </div>
@@ -4192,20 +4192,325 @@ function exportLogs() {
       return parts.join('');
     }
 
-    function downloadFieldReport() {
+    function reportLoadImg(src) {
+      return new Promise(resolve => {
+        if (!src) { resolve(null); return; }
+        const im = new Image();
+        im.onload = () => resolve(im);
+        im.onerror = () => resolve(null);
+        im.src = src;
+      });
+    }
+    function canvasWrap(ctx, text, maxW) {
+      const words = String(text || '').split(/\s+/);
+      const lines = [];
+      let line = '';
+      words.forEach(w => {
+        const next = line ? line + ' ' + w : w;
+        if (ctx.measureText(next).width > maxW && line) { lines.push(line); line = w; }
+        else line = next;
+      });
+      if (line) lines.push(line);
+      return lines.length ? lines : [''];
+    }
+    function canvasRoundRect(ctx, x, y, w, h, r) {
+      const rad = Math.min(r, w / 2, h / 2);
+      ctx.beginPath();
+      ctx.moveTo(x + rad, y);
+      ctx.arcTo(x + w, y, x + w, y + h, rad);
+      ctx.arcTo(x + w, y + h, x, y + h, rad);
+      ctx.arcTo(x, y + h, x, y, rad);
+      ctx.arcTo(x, y, x + w, y, rad);
+      ctx.closePath();
+    }
+    function canvasBadge(ctx, label, x, y) {
+      const lifer = label === 'Lifer';
+      ctx.font = '700 18px system-ui,sans-serif';
+      const w = ctx.measureText(label.toUpperCase()).width + 18;
+      ctx.fillStyle = lifer ? '#ecfdf5' : '#fffbeb';
+      canvasRoundRect(ctx, x, y - 16, w, 24, 12);
+      ctx.fill();
+      ctx.strokeStyle = lifer ? '#a7f3d0' : '#fcd34d';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.fillStyle = lifer ? '#047857' : '#b45309';
+      ctx.fillText(label.toUpperCase(), x + 9, y + 2);
+      return w;
+    }
+    function reportBadgeText(s, day) {
+      if (isLiferOnDay(s.species_code, day)) return 'Lifer';
+      if (Number(s.is_cover)) return 'Cover';
+      return '';
+    }
+    async function buildFieldReportJpeg(day, rows) {
+      const pretty = day ? new Date(day + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }) : day;
+      const species = [];
+      const seen = new Set();
+      rows.forEach(s => {
+        if (seen.has(s.species_code)) return;
+        seen.add(s.species_code);
+        species.push(s.species_code);
+      });
+      species.sort((a, b) => taxName(a).comName.localeCompare(taxName(b).comName));
+      const lifers = species.filter(c => isLiferOnDay(c, day));
+      const places = [];
+      const placeSet = new Set();
+      rows.forEach(s => {
+        const label = bezelPlace(s) || placeLabel(s) || s.state || '';
+        if (label && !placeSet.has(label)) { placeSet.add(label); places.push(label); }
+      });
+      const notes = rows.filter(s => s.notes && String(s.notes).trim());
+      const imgs = [];
+      for (let i = 0; i < rows.length; i++) imgs.push(await reportLoadImg(rows[i].photo_url));
+
+      const W = 1080;
+      const pad = 48;
+      const inner = W - pad * 2;
+      const photoSize = Math.min(640, inner);
+      let y = 56;
+      y += 28 + 44;
+      y += 36;
+      y += 110;
+      y += 36 + Math.ceil(rows.length / 6) * 140 + 16;
+      y += 36;
+      rows.forEach((s, i) => {
+        const im = imgs[i];
+        const ph = im && im.naturalWidth ? Math.min(photoSize, photoSize * (im.naturalHeight / im.naturalWidth)) : photoSize;
+        y += ph + 96 + (s.notes ? 36 : 0);
+      });
+      y += 36 + species.length * 56 + 40 + notes.length * 40 + 80;
+      const H = Math.min(8192, Math.max(1400, y));
+      const canvas = document.createElement('canvas');
+      canvas.width = W;
+      canvas.height = H;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#f5f5f4';
+      ctx.fillRect(0, 0, W, H);
+
+      let cy = 56;
+      ctx.fillStyle = '#047857';
+      ctx.font = '800 18px system-ui,sans-serif';
+      ctx.letterSpacing = '2px';
+      ctx.fillText('BIRDSEYE FIELD REPORT', pad, cy);
+      cy += 42;
+      ctx.fillStyle = '#1c1917';
+      ctx.font = '800 42px system-ui,sans-serif';
+      ctx.fillText(pretty, pad, cy);
+      cy += 28;
+      if (places.length) {
+        ctx.fillStyle = '#57534e';
+        ctx.font = '400 22px system-ui,sans-serif';
+        canvasWrap(ctx, places.join('  ·  '), inner).forEach(line => {
+          ctx.fillText(line, pad, cy);
+          cy += 28;
+        });
+      }
+      cy += 12;
+      const stats = [
+        [String(species.length), 'species'],
+        [String(rows.length), 'photos'],
+        [String(lifers.length), lifers.length === 1 ? 'lifer' : 'lifers'],
+        [String(places.length), places.length === 1 ? 'location' : 'locations']
+      ];
+      const boxW = (inner - 36) / 4;
+      stats.forEach((st, i) => {
+        const x = pad + i * (boxW + 12);
+        ctx.fillStyle = '#fff';
+        ctx.strokeStyle = '#e7e5e4';
+        ctx.lineWidth = 2;
+        canvasRoundRect(ctx, x, cy, boxW, 88, 16);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = '#1c1917';
+        ctx.font = '800 36px system-ui,sans-serif';
+        ctx.fillText(st[0], x + 16, cy + 42);
+        ctx.fillStyle = '#57534e';
+        ctx.font = '500 18px system-ui,sans-serif';
+        ctx.fillText(st[1], x + 16, cy + 68);
+      });
+      cy += 118;
+
+      ctx.fillStyle = '#1c1917';
+      ctx.font = '700 24px system-ui,sans-serif';
+      ctx.fillText('Identified', pad, cy);
+      cy += 18;
+      const chit = 92, gap = 18;
+      let cx = pad;
+      const chitTop = cy;
+      rows.forEach((s, i) => {
+        if (cx + chit > pad + inner) { cx = pad; cy += chit + 48; }
+        const im = imgs[i];
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(cx + chit / 2, cy + chit / 2, chit / 2, 0, Math.PI * 2);
+        ctx.fillStyle = '#eceae6';
+        ctx.fill();
+        ctx.clip();
+        if (im) ctx.drawImage(im, cx, cy, chit, chit);
+        ctx.restore();
+        ctx.fillStyle = '#44403c';
+        ctx.font = '600 14px system-ui,sans-serif';
+        ctx.textAlign = 'center';
+        const nm = taxName(s.species_code).comName;
+        ctx.fillText(nm.length > 16 ? nm.slice(0, 15) + '…' : nm, cx + chit / 2, cy + chit + 18);
+        const badge = reportBadgeText(s, day);
+        if (badge) {
+          ctx.fillStyle = badge === 'Lifer' ? '#047857' : '#b45309';
+          ctx.font = '800 11px system-ui,sans-serif';
+          ctx.fillText(badge.toUpperCase(), cx + chit / 2, cy + chit + 34);
+        }
+        ctx.textAlign = 'left';
+        cx += chit + gap;
+      });
+      cy += chit + 56;
+
+      ctx.fillStyle = '#1c1917';
+      ctx.font = '700 24px system-ui,sans-serif';
+      ctx.fillText('Photos', pad, cy);
+      cy += 16;
+      for (let i = 0; i < rows.length; i++) {
+        const s = rows[i];
+        const n = taxName(s.species_code);
+        const im = imgs[i];
+        let pw = inner, ph = photoSize;
+        if (im && im.naturalWidth) {
+          ph = Math.min(photoSize, inner * (im.naturalHeight / im.naturalWidth));
+          pw = ph * (im.naturalWidth / im.naturalHeight);
+          if (pw > inner) { pw = inner; ph = pw * (im.naturalHeight / im.naturalWidth); }
+        }
+        if (cy + ph + 120 > H - 40) break;
+        ctx.fillStyle = '#fff';
+        canvasRoundRect(ctx, pad, cy, inner, ph + 88, 20);
+        ctx.fill();
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(pad, cy, inner, ph);
+        ctx.clip();
+        ctx.fillStyle = '#eceae6';
+        ctx.fillRect(pad, cy, inner, ph);
+        if (im) ctx.drawImage(im, pad + (inner - pw) / 2, cy, pw, ph);
+        ctx.restore();
+        let ty = cy + ph + 28;
+        ctx.fillStyle = '#1c1917';
+        ctx.font = '700 24px system-ui,sans-serif';
+        ctx.fillText(n.comName, pad + 16, ty);
+        const badge = reportBadgeText(s, day);
+        if (badge) canvasBadge(ctx, badge, pad + 24 + ctx.measureText(n.comName).width, ty - 2);
+        ty += 24;
+        ctx.fillStyle = '#78716c';
+        ctx.font = 'italic 18px system-ui,sans-serif';
+        ctx.fillText(n.sciName || '', pad + 16, ty);
+        ty += 22;
+        const where = bezelPlace(s) || placeLabel(s) || '';
+        if (where) {
+          ctx.fillStyle = '#57534e';
+          ctx.font = '400 18px system-ui,sans-serif';
+          ctx.fillText(where, pad + 16, ty);
+        }
+        cy += ph + 100;
+      }
+
+      ctx.fillStyle = '#fff';
+      canvasRoundRect(ctx, pad, cy, inner, Math.max(80, species.length * 52 + 56), 16);
+      ctx.fill();
+      ctx.strokeStyle = '#e7e5e4';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      cy += 36;
+      ctx.fillStyle = '#1c1917';
+      ctx.font = '700 24px system-ui,sans-serif';
+      ctx.fillText('Species', pad + 16, cy);
+      cy += 20;
+      species.forEach(code => {
+        const n = taxName(code);
+        const count = rows.filter(s => s.species_code === code).length;
+        ctx.fillStyle = '#059669';
+        ctx.beginPath();
+        ctx.arc(pad + 28, cy, 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#1c1917';
+        ctx.font = '700 20px system-ui,sans-serif';
+        ctx.fillText(n.comName, pad + 42, cy + 6);
+        if (isLiferOnDay(code, day)) canvasBadge(ctx, 'Lifer', pad + 50 + ctx.measureText(n.comName).width, cy + 4);
+        ctx.fillStyle = '#78716c';
+        ctx.font = 'italic 16px system-ui,sans-serif';
+        ctx.fillText((n.sciName || '') + '  ·  ' + count + (count === 1 ? ' photo' : ' photos'), pad + 42, cy + 26);
+        const monthly = (speciesFromState(code) || {}).monthly || [];
+        const sx = pad + inner - 168;
+        monthly.slice(0, 12).forEach((v, mi) => {
+          const h = 4 + (v || 0) * 18;
+          ctx.fillStyle = (v || 0) >= 0.45 ? '#059669' : (v || 0) >= 0.15 ? '#c2410c' : '#a8a29e';
+          ctx.fillRect(sx + mi * 12, cy + 10 - h, 8, h);
+          if (mi === CURRENT_MONTH) {
+            ctx.fillStyle = '#38bdf8';
+            ctx.fillRect(sx + mi * 12, cy + 14, 8, 3);
+          }
+        });
+        cy += 52;
+      });
+      cy += 24;
+      if (notes.length) {
+        ctx.fillStyle = '#1c1917';
+        ctx.font = '700 24px system-ui,sans-serif';
+        ctx.fillText('Notes', pad, cy);
+        cy += 28;
+        notes.forEach(s => {
+          ctx.fillStyle = '#44403c';
+          ctx.font = '400 18px system-ui,sans-serif';
+          canvasWrap(ctx, taxName(s.species_code).comName + '. ' + s.notes, inner).forEach(line => {
+            ctx.fillText(line, pad, cy);
+            cy += 24;
+          });
+          cy += 8;
+        });
+      }
+      cy += 12;
+      ctx.fillStyle = '#78716c';
+      ctx.font = '400 16px system-ui,sans-serif';
+      ctx.fillText('Generated from BirdsEye  ·  ' + pretty + '  ·  ' + species.length + ' species, ' + lifers.length + ' lifers', pad, Math.min(H - 24, cy));
+
+      return await new Promise((resolve, reject) => {
+        canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('Could not write image')), 'image/jpeg', 0.88);
+      });
+    }
+    function isMobileReport() {
+      return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || '');
+    }
+    async function downloadFieldReport() {
       const day = (document.getElementById('report-date') || {}).value || '';
       const rows = reportDayRows().filter(s => reportPickIds.has(s.id));
       if (!day) { alert('Pick a date first.'); return; }
       if (!rows.length) { alert('Select at least one photo.'); return; }
-      const html = buildFieldReportHtml(day, rows);
-      const blob = new Blob([html], { type: 'text/html' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'birdseye-field-report-' + day + '.html';
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 2000);
+      const btn = document.getElementById('btn-download-report');
+      const prev = btn ? btn.textContent : '';
+      if (btn) { btn.textContent = 'Building image…'; btn.disabled = true; }
+      try {
+        const blob = await buildFieldReportJpeg(day, rows);
+        const filename = 'birdseye-field-report-' + day + '.jpg';
+        if (isMobileReport()) {
+          try {
+            const file = new File([blob], filename, { type: 'image/jpeg' });
+            if (navigator.canShare && navigator.canShare({ files: [file] })) {
+              await navigator.share({ files: [file], title: filename, text: 'BirdsEye field report' });
+              return;
+            }
+          } catch (e) {
+            if (e && e.name === 'AbortError') return;
+          }
+        }
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 2000);
+      } catch (e) {
+        console.error(e);
+        alert('Could not save the JPG. Try fewer photos.');
+      } finally {
+        if (btn) { btn.textContent = prev || 'Save JPG'; btn.disabled = false; }
+      }
     }
 
     function onRadarScopeChange() {
